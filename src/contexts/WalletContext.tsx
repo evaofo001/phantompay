@@ -1,11 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { useAdmin } from './AdminContext';
 import { calculateFee, getFeeBreakdown } from '../utils/feeCalculator';
-import { autoCollectTransactionFee, collectPremiumSubscription, deductFromAdminWallet } from '../utils/revenueCollector';
 import { Transaction, SavingsAccount, User } from '../types';
-import { db } from '../config/firebase';
 import toast from 'react-hot-toast';
 
 interface WalletContextType {
@@ -64,11 +61,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser) return;
 
     try {
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as User;
+      // Check if user data exists in localStorage
+      const savedUserData = localStorage.getItem(`user_${currentUser.uid}`);
+      
+      if (savedUserData) {
+        const userData = JSON.parse(savedUserData) as User;
         setUser(userData);
         setBalance(userData.walletBalance || 0);
         setSavingsBalance(userData.savingsBalance || 0);
@@ -79,9 +76,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           uid: currentUser.uid,
           email: currentUser.email || '',
           displayName: currentUser.displayName || 'User',
-          walletBalance: 0,
+          walletBalance: 10000, // Demo starting balance
           savingsBalance: 0,
-          rewardPoints: 0,
+          rewardPoints: 250, // Demo reward points
           totalEarnedInterest: 0,
           premiumStatus: false,
           referralsCount: 0,
@@ -90,19 +87,41 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           createdAt: new Date()
         };
 
-        await setDoc(userDocRef, newUser);
+        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(newUser));
         setUser(newUser);
-        setBalance(0);
+        setBalance(10000);
         setSavingsBalance(0);
-        setRewardPoints(0);
+        setRewardPoints(250);
       }
+
+      // Load transactions
+      const savedTransactions = localStorage.getItem(`transactions_${currentUser.uid}`);
+      if (savedTransactions) {
+        const transactionsList = JSON.parse(savedTransactions).map((t: any) => ({
+          ...t,
+          timestamp: new Date(t.timestamp)
+        }));
+        setTransactions(transactionsList);
+      }
+
+      // Load savings accounts
+      const savedSavings = localStorage.getItem(`savings_${currentUser.uid}`);
+      if (savedSavings) {
+        const savingsList = JSON.parse(savedSavings).map((s: any) => ({
+          ...s,
+          startDate: new Date(s.startDate),
+          maturityDate: new Date(s.maturityDate)
+        }));
+        setSavingsAccounts(savingsList);
+      }
+
     } catch (error) {
       console.error('Error initializing user:', error);
       toast.error('Failed to load user data');
     }
   };
 
-  // Initialize user data from Firestore
+  // Initialize user data when currentUser changes
   useEffect(() => {
     if (!currentUser) {
       setUser(null);
@@ -117,63 +136,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     initializeUser();
   }, [currentUser]);
 
-  // Listen to transactions
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const transactionsQuery = query(
-      collection(db, 'transactions'),
-      where('uid', '==', currentUser.uid),
-      orderBy('timestamp', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
-      const transactionsList: Transaction[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        transactionsList.push({
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp.toDate()
-        } as Transaction);
-      });
-      setTransactions(transactionsList);
-    }, (error) => {
-      console.error('Error listening to transactions:', error);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser]);
-
-  // Listen to savings accounts
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const savingsQuery = query(
-      collection(db, 'savings'),
-      where('uid', '==', currentUser.uid),
-      orderBy('startDate', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(savingsQuery, (snapshot) => {
-      const savingsList: SavingsAccount[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        savingsList.push({
-          id: doc.id,
-          ...data,
-          startDate: data.startDate.toDate(),
-          maturityDate: data.maturityDate.toDate()
-        } as SavingsAccount);
-      });
-      setSavingsAccounts(savingsList);
-    }, (error) => {
-      console.error('Error listening to savings:', error);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser]);
-
   const updateUserBalance = async (newBalance: number, newSavingsBalance?: number, newRewardPoints?: number) => {
     if (!currentUser || !user) return;
 
@@ -185,18 +147,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     try {
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const updateData: any = { walletBalance: newBalance };
-      
-      if (newSavingsBalance !== undefined) {
-        updateData.savingsBalance = newSavingsBalance;
-      }
-      
-      if (newRewardPoints !== undefined) {
-        updateData.rewardPoints = newRewardPoints;
-      }
-
-      await updateDoc(userDocRef, updateData);
+      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
       
       setBalance(newBalance);
       if (newSavingsBalance !== undefined) setSavingsBalance(newSavingsBalance);
@@ -217,8 +168,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     try {
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, premiumData);
+      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
       setUser(updatedUser);
     } catch (error) {
       console.error('Error updating premium status:', error);
@@ -227,19 +177,29 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addTransaction = async (transactionData: Omit<Transaction, 'id'>) => {
+    if (!currentUser) return;
+
     try {
-      const docRef = await addDoc(collection(db, 'transactions'), {
+      const newTransaction: Transaction = {
         ...transactionData,
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date()
-      });
+      };
+
+      const updatedTransactions = [newTransaction, ...transactions];
+      setTransactions(updatedTransactions);
+      
+      // Save to localStorage
+      localStorage.setItem(`transactions_${currentUser.uid}`, JSON.stringify(updatedTransactions));
 
       // Collect fees to admin wallet if there's a fee
       if (transactionData.fee && transactionData.fee > 0) {
-        await autoCollectTransactionFee(
+        await collectRevenue(
           transactionData.fee,
-          docRef.id,
+          'transaction_fee',
+          newTransaction.id,
           transactionData.uid,
-          transactionData.type
+          `${transactionData.type} transaction fee`
         );
       }
 
@@ -250,10 +210,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         // Collect premium subscription revenue
         const planType = (user as any)?.premiumPlan || 'plus';
-        await collectPremiumSubscription(
+        await collectRevenue(
           transactionData.amount,
+          'premium_subscription',
+          newTransaction.id,
           transactionData.uid,
-          planType
+          `${planType} premium subscription`
         );
       }
     } catch (error) {
@@ -460,7 +422,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const maturityDate = new Date(startDate);
       maturityDate.setMonth(maturityDate.getMonth() + lockPeriod);
 
-      const newSavingsAccount: Omit<SavingsAccount, 'id'> = {
+      const newSavingsAccount: SavingsAccount = {
+        id: `savings_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         uid: currentUser.uid,
         principal: amount,
         lockPeriod,
@@ -470,7 +433,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         status: 'active'
       };
 
-      await addDoc(collection(db, 'savings'), newSavingsAccount);
+      const updatedSavings = [newSavingsAccount, ...savingsAccounts];
+      setSavingsAccounts(updatedSavings);
+      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
 
       const newBalance = balance - amount;
       const newSavingsBalance = savingsBalance + amount;
@@ -507,25 +472,35 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       let withdrawalAmount = savingsAccount.currentValue || savingsAccount.principal;
       let penalty = 0;
+      let interestEarned = 0;
 
       if (isEarly) {
         penalty = savingsAccount.principal * 0.05; // 5% penalty
         withdrawalAmount = savingsAccount.principal - penalty;
+      } else {
+        // Calculate interest for matured savings
+        const monthsElapsed = savingsAccount.lockPeriod;
+        const monthlyRate = savingsAccount.annualInterestRate / 12 / 100;
+        const totalValue = savingsAccount.principal * Math.pow(1 + monthlyRate, monthsElapsed);
+        interestEarned = totalValue - savingsAccount.principal;
+        withdrawalAmount = totalValue;
       }
 
       const newBalance = balance + withdrawalAmount;
       const newSavingsBalance = savingsBalance - savingsAccount.principal;
       await updateUserBalance(newBalance, newSavingsBalance);
 
-      // If there's interest to be paid, deduct from admin wallet
+      // If there's interest to be paid, it comes from admin wallet (expense)
       if (interestEarned > 0) {
-        await deductFromAdminWallet(
-          interestEarned,
-          currentUser.uid,
+        await collectRevenue(
+          -interestEarned, // Negative amount = expense
           'savings_interest',
+          savingsId,
+          currentUser.uid,
           `Savings interest payment: ${interestEarned} KES for account ${savingsId}`
         );
       }
+
       await addTransaction({
         uid: currentUser.uid,
         type: 'savings_withdrawal',
@@ -536,8 +511,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         direction: '+'
       });
 
-      // Delete the savings account
-      await deleteDoc(doc(db, 'savings', savingsId));
+      // Remove the savings account
+      const updatedSavings = savingsAccounts.filter(s => s.id !== savingsId);
+      setSavingsAccounts(updatedSavings);
+      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
     } finally {
       setLoading(false);
     }
@@ -547,15 +524,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser) return;
     
     // Calculate cost of reward points (1 point = 0.1 KES)
-    const pointsCost = points * 0.1;
+    const pointsCost = Math.abs(points) * 0.1;
     
-    // Deduct cost from admin wallet
-    await deductFromAdminWallet(
-      pointsCost,
-      currentUser.uid,
-      'reward_points',
-      `Reward points payout: ${points} points (${pointsCost} KES)`
-    );
+    if (points < 0) {
+      // Redeeming points - this is an expense from admin wallet
+      await collectRevenue(
+        -pointsCost, // Negative amount = expense
+        'reward_points',
+        `reward_redemption_${Date.now()}`,
+        currentUser.uid,
+        `Reward points redemption: ${Math.abs(points)} points (${pointsCost} KES cost)`
+      );
+    }
     
     const newRewardPoints = rewardPoints + points;
     await updateUserBalance(balance, undefined, newRewardPoints);
@@ -566,16 +546,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     setLoading(true);
     try {
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as User;
-        setBalance(userData.walletBalance || 0);
-        setSavingsBalance(userData.savingsBalance || 0);
-        setRewardPoints(userData.rewardPoints || 0);
-        setUser(userData);
-      }
+      await initializeUser();
     } catch (error) {
       console.error('Error refreshing balance:', error);
       toast.error('Failed to refresh balance');
