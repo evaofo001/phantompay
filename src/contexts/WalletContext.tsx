@@ -76,9 +76,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           uid: currentUser.uid,
           email: currentUser.email || '',
           displayName: currentUser.displayName || 'User',
-          walletBalance: 10000, // Demo starting balance
+          walletBalance: 0, // Fresh start - no balance
           savingsBalance: 0,
-          rewardPoints: 250, // Demo reward points
+          rewardPoints: 0, // Fresh start - no points
           totalEarnedInterest: 0,
           premiumStatus: false,
           referralsCount: 0,
@@ -89,9 +89,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(newUser));
         setUser(newUser);
-        setBalance(10000);
+        setBalance(0);
         setSavingsBalance(0);
-        setRewardPoints(250);
+        setRewardPoints(0);
       }
 
       // Load transactions

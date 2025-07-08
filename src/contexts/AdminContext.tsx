@@ -108,10 +108,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } else {
         walletData = {
           uid: 'admin_wallet',
-          balance: 50000, // Starting with some demo balance
-          totalRevenue: 50000,
-          monthlyRevenue: 15000,
-          dailyRevenue: 2500,
+          balance: 0, // Fresh start - no balance
+          totalRevenue: 0,
+          monthlyRevenue: 0,
+          dailyRevenue: 0,
           lastUpdated: new Date()
         };
         localStorage.setItem('admin_wallet', JSON.stringify(walletData));
@@ -127,13 +127,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       // Mock platform stats
       const mockStats: PlatformStats = {
-        totalUsers: 1250,
-        activeUsers: 890,
-        premiumUsers: 156,
-        totalTransactions: 8945,
-        totalVolume: 2450000,
-        averageTransactionSize: 2750,
-        conversionRate: 12.5
+        totalUsers: 0,
+        activeUsers: 0,
+        premiumUsers: 0,
+        totalTransactions: 0,
+        totalVolume: 0,
+        averageTransactionSize: 0,
+        conversionRate: 0
       };
 
       setPlatformStats(mockStats);
@@ -144,40 +144,18 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const loadRevenueRecords = async () => {
     try {
-      // Mock revenue records
-      const mockRecords: RevenueRecord[] = [
-        {
-          id: '1',
-          type: 'transaction_fee',
-          amount: 45,
-          sourceTransactionId: 'txn_001',
-          sourceUserId: 'user_001',
-          timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-          description: 'P2P transfer fee',
-          status: 'collected'
-        },
-        {
-          id: '2',
-          type: 'premium_subscription',
-          amount: 500,
-          sourceUserId: 'user_002',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-          description: 'VIP subscription payment',
-          status: 'collected'
-        },
-        {
-          id: '3',
-          type: 'withdrawal_fee',
-          amount: 75,
-          sourceTransactionId: 'txn_003',
-          sourceUserId: 'user_003',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
-          description: 'Bank withdrawal fee',
-          status: 'collected'
-        }
-      ];
 
-      setRevenueRecords(mockRecords);
+      // Load revenue records from localStorage
+      const savedRecords = localStorage.getItem('admin_revenue_records');
+      if (savedRecords) {
+        const records = JSON.parse(savedRecords).map((r: any) => ({
+          ...r,
+          timestamp: new Date(r.timestamp)
+        }));
+        setRevenueRecords(records);
+      } else {
+        setRevenueRecords([]);
+      }
     } catch (error) {
       console.error('Error loading revenue records:', error);
     }
@@ -206,6 +184,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
 
       setRevenueRecords(prev => [newRecord, ...prev]);
+      
+      // Save to localStorage
+      const updatedRecords = [newRecord, ...revenueRecords];
+      localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));
 
       // Update admin wallet
       const updatedWallet = {
@@ -260,6 +242,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
 
       setRevenueRecords(prev => [withdrawalRecord, ...prev]);
+      
+      // Save to localStorage
+      const updatedRecords = [withdrawalRecord, ...revenueRecords];
+      localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));
 
       // Update admin wallet
       const updatedWallet = {
@@ -320,6 +306,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
 
       setRevenueRecords(prev => [transferRecord, ...prev]);
+      
+      // Save to localStorage
+      const updatedRecords = [transferRecord, ...revenueRecords];
+      localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));
 
       // Update admin wallet
       const updatedWallet = {
