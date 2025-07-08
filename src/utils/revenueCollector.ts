@@ -9,6 +9,12 @@ export interface RevenueCollectionData {
   description: string;
 }
 
+export interface AdminExpenseData {
+  amount: number;
+  type: 'savings_interest' | 'referral_payment' | 'reward_points' | 'cashback';
+  targetUserId: string;
+  description: string;
+}
 export const collectRevenueToAdminWallet = async (data: RevenueCollectionData) => {
   try {
     // Add revenue record
@@ -38,6 +44,41 @@ export const collectRevenueToAdminWallet = async (data: RevenueCollectionData) =
   }
 };
 
+// Function to deduct expenses from admin wallet
+export const deductFromAdminWallet = async (
+  amount: number,
+  targetUserId: string,
+  expenseType: string,
+  description: string
+) => {
+  try {
+    // Add expense record (negative amount)
+    const expenseRecord = {
+      type: expenseType,
+      amount: -amount, // Negative for expense
+      sourceTransactionId: `expense_${Date.now()}`,
+      sourceUserId: targetUserId,
+      timestamp: new Date(),
+      description,
+      status: 'collected'
+    };
+
+    await addDoc(collection(db, 'revenue'), expenseRecord);
+
+    // Deduct from admin wallet balance
+    const adminWalletRef = doc(db, 'admin_wallet', 'main');
+    await updateDoc(adminWalletRef, {
+      balance: increment(-amount),
+      lastUpdated: new Date()
+    });
+
+    console.log(`Admin expense: ${amount} KES for ${expenseType}`);
+    return true;
+  } catch (error) {
+    console.error('Error processing admin expense:', error);
+    return false;
+  }
+};
 // Helper function to automatically collect fees from transactions
 export const autoCollectTransactionFee = async (
   feeAmount: number,

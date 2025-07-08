@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { useAdmin } from './AdminContext';
 import { calculateFee, getFeeBreakdown } from '../utils/feeCalculator';
-import { autoCollectTransactionFee, collectPremiumSubscription } from '../utils/revenueCollector';
+import { autoCollectTransactionFee, collectPremiumSubscription, deductFromAdminWallet } from '../utils/revenueCollector';
 import { Transaction, SavingsAccount, User } from '../types';
 import { db } from '../config/firebase';
 import toast from 'react-hot-toast';
@@ -43,6 +44,7 @@ export const useWallet = () => {
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
+  const { collectRevenue } = useAdmin();
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
   const [savingsBalance, setSavingsBalance] = useState(0);
@@ -515,6 +517,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const newSavingsBalance = savingsBalance - savingsAccount.principal;
       await updateUserBalance(newBalance, newSavingsBalance);
 
+      // If there's interest to be paid, deduct from admin wallet
+      if (interestEarned > 0) {
+        await deductFromAdminWallet(
+          interestEarned,
+          currentUser.uid,
+          'savings_interest',
+          `Savings interest payment: ${interestEarned} KES for account ${savingsId}`
+        );
+      }
       await addTransaction({
         uid: currentUser.uid,
         type: 'savings_withdrawal',
@@ -534,6 +545,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const addRewardPoints = async (points: number) => {
     if (!currentUser) return;
+    
+    // Calculate cost of reward points (1 point = 0.1 KES)
+    const pointsCost = points * 0.1;
+    
+    // Deduct cost from admin wallet
+    await deductFromAdminWallet(
+      pointsCost,
+      currentUser.uid,
+      'reward_points',
+      `Reward points payout: ${points} points (${pointsCost} KES)`
+    );
     
     const newRewardPoints = rewardPoints + points;
     await updateUserBalance(balance, undefined, newRewardPoints);

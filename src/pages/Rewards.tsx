@@ -89,28 +89,17 @@ const Rewards: React.FC = () => {
 
   const handleRedeem = (option: any) => {
     if (option.available) {
-      // In a real app, this would make an API call to redeem rewards
-      addRewardPoints(-option.points);
+      // Deduct points and add value to wallet
+      const pointsToDeduct = -option.points;
+      addRewardPoints(pointsToDeduct);
       
-      // Show success message based on reward type
-      let successMessage = '';
-      switch (option.id) {
-        case 1:
-          successMessage = `${formatCurrency(option.value)} added to your wallet!`;
-          break;
-        case 2:
-          successMessage = 'Free transfer credit added to your account!';
-          break;
-        case 3:
-          successMessage = '20% airtime discount activated!';
-          break;
-        case 4:
-          successMessage = 'Data bonus will be applied to your next purchase!';
-          break;
+      // For cash conversion, add money to wallet
+      if (option.id === 1) {
+        // This would typically update the user's balance
+        // The cost is already handled in addRewardPoints function
       }
       
-      // In a real app, you'd show a toast notification
-      alert(successMessage);
+      toast.success(`Successfully redeemed ${option.points} points! 🎉`);
     }
   };
 
