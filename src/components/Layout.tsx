@@ -12,7 +12,7 @@ import {
   LogOut,
   Crown,
   Minus,
-  Shield
+  Shield,
   Target
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
