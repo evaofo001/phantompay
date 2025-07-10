@@ -19,7 +19,11 @@ import {
   Phone,
   Calendar,
   Lock,
-  Smartphone
+  Smartphone,
+  Building,
+  Plus,
+  Trash2,
+  MapPin
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -33,14 +37,51 @@ const Settings: React.FC = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [showAddWithdrawal, setShowAddWithdrawal] = useState(false);
+  const [withdrawalType, setWithdrawalType] = useState<'bank' | 'mobile' | 'card'>('mobile');
   
   // Profile Data
   const [profileData, setProfileData] = useState({
     fullName: user?.displayName || 'John Doe',
-    phoneNumber: '+254 712 345 678',
+    phoneNumber: user?.phoneNumber || '+254 712 345 678',
     dateOfBirth: '1990-01-15',
+    address: '123 Nairobi Street, Kenya',
+    idNumber: 'ID123456789',
     language: 'English',
     currency: 'KES'
+  });
+
+  // Withdrawal Methods
+  const [withdrawalMethods, setWithdrawalMethods] = useState([
+    {
+      id: '1',
+      type: 'mobile' as const,
+      name: 'My M-Pesa',
+      details: { phoneNumber: '+254 712 345 678', provider: 'mpesa', accountName: 'John Doe' },
+      isDefault: true,
+      verified: true
+    },
+    {
+      id: '2', 
+      type: 'bank' as const,
+      name: 'Equity Bank',
+      details: { bankName: 'Equity Bank', accountNumber: '1234567890', accountHolderName: 'John Doe' },
+      isDefault: false,
+      verified: true
+    }
+  ]);
+
+  const [newWithdrawalMethod, setNewWithdrawalMethod] = useState({
+    name: '',
+    phoneNumber: '',
+    provider: 'mpesa',
+    bankName: '',
+    accountNumber: '',
+    accountHolderName: '',
+    cardType: 'visa',
+    cardNumber: '',
+    expiryDate: '',
+    cardHolderName: ''
   });
   
   // Notification Settings
@@ -135,6 +176,57 @@ const Settings: React.FC = () => {
     toast.success('Data export initiated. You will receive a download link via email.');
   };
 
+  const handleAddWithdrawalMethod = () => {
+    if (!newWithdrawalMethod.name) {
+      toast.error('Please enter a name for this method');
+      return;
+    }
+
+    const newMethod = {
+      id: Date.now().toString(),
+      type: withdrawalType,
+      name: newWithdrawalMethod.name,
+      details: withdrawalType === 'mobile' ? {
+        phoneNumber: newWithdrawalMethod.phoneNumber,
+        provider: newWithdrawalMethod.provider,
+        accountName: newWithdrawalMethod.accountHolderName
+      } : withdrawalType === 'bank' ? {
+        bankName: newWithdrawalMethod.bankName,
+        accountNumber: newWithdrawalMethod.accountNumber,
+        accountHolderName: newWithdrawalMethod.accountHolderName
+      } : {
+        cardType: newWithdrawalMethod.cardType,
+        cardNumber: `****-****-****-${newWithdrawalMethod.cardNumber.slice(-4)}`,
+        expiryDate: newWithdrawalMethod.expiryDate,
+        cardHolderName: newWithdrawalMethod.cardHolderName
+      },
+      isDefault: withdrawalMethods.length === 0,
+      verified: false
+    };
+
+    setWithdrawalMethods([...withdrawalMethods, newMethod]);
+    setShowAddWithdrawal(false);
+    setNewWithdrawalMethod({
+      name: '', phoneNumber: '', provider: 'mpesa', bankName: '', accountNumber: '', 
+      accountHolderName: '', cardType: 'visa', cardNumber: '', expiryDate: '', cardHolderName: ''
+    });
+    toast.success('Withdrawal method added successfully');
+  };
+
+  const handleDeleteWithdrawalMethod = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this withdrawal method?')) {
+      setWithdrawalMethods(withdrawalMethods.filter(method => method.id !== id));
+      toast.success('Withdrawal method deleted');
+    }
+  };
+
+  const handleSetDefaultWithdrawal = (id: string) => {
+    setWithdrawalMethods(withdrawalMethods.map(method => ({
+      ...method,
+      isDefault: method.id === id
+    })));
+    toast.success('Default withdrawal method updated');
+  };
   const EditableField = ({ field, value, type = 'text', placeholder }: any) => {
     const [tempValue, setTempValue] = useState(value);
     
@@ -261,8 +353,354 @@ const Settings: React.FC = () => {
               />
             </div>
           </div>
+
+          <div className="flex justify-between items-center py-3 border-b border-gray-100">
+            <div>
+              <p className="font-medium text-gray-900">Address</p>
+              <EditableField 
+                field="address" 
+                value={profileData.address} 
+                placeholder="Enter your address"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center py-3">
+            <div>
+              <p className="font-medium text-gray-900">ID Number</p>
+              <EditableField 
+                field="idNumber" 
+                value={profileData.idNumber} 
+                placeholder="Enter your ID number"
+              />
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Withdrawal & Deposit Destinations */}
+      <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <CreditCard className="h-6 w-6 text-gray-600 mr-3" />
+            <h2 className="text-xl font-semibold text-gray-900">Withdrawal & Deposit Methods</h2>
+          </div>
+          <button
+            onClick={() => setShowAddWithdrawal(true)}
+            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Method
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {withdrawalMethods.map((method) => (
+            <div key={method.id} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gray-100 rounded-lg mr-3">
+                    {method.type === 'mobile' && <Smartphone className="h-5 w-5 text-green-600" />}
+                    {method.type === 'bank' && <Building className="h-5 w-5 text-blue-600" />}
+                    {method.type === 'card' && <CreditCard className="h-5 w-5 text-purple-600" />}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-gray-900">{method.name}</h3>
+                    <p className="text-sm text-gray-600 capitalize">{method.type}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {method.isDefault && (
+                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                      Default
+                    </span>
+                  )}
+                  {method.verified ? (
+                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">
+                      Pending
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteWithdrawalMethod(method.id)}
+                    className="text-red-600 hover:text-red-700 p-1"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="text-sm text-gray-600 space-y-1">
+                {method.type === 'mobile' && (
+                  <>
+                    <p>Phone: {(method.details as any).phoneNumber}</p>
+                    <p>Provider: {(method.details as any).provider.toUpperCase()}</p>
+                  </>
+                )}
+                {method.type === 'bank' && (
+                  <>
+                    <p>Bank: {(method.details as any).bankName}</p>
+                    <p>Account: ****{(method.details as any).accountNumber.slice(-4)}</p>
+                  </>
+                )}
+                {method.type === 'card' && (
+                  <>
+                    <p>Card: {(method.details as any).cardNumber}</p>
+                    <p>Expires: {(method.details as any).expiryDate}</p>
+                  </>
+                )}
+              </div>
+
+              {!method.isDefault && (
+                <button
+                  onClick={() => handleSetDefaultWithdrawal(method.id)}
+                  className="mt-3 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                >
+                  Set as Default
+                </button>
+              )}
+            </div>
+          ))}
+
+          {withdrawalMethods.length === 0 && (
+            <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+              <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500">No withdrawal methods added yet</p>
+              <p className="text-sm text-gray-400 mt-1">Add a method to enable withdrawals</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Withdrawal Method Modal */}
+      {showAddWithdrawal && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Add Withdrawal Method</h3>
+              <button
+                onClick={() => setShowAddWithdrawal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Method Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Method Type
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'mobile', name: 'Mobile Money', icon: Smartphone },
+                    { id: 'bank', name: 'Bank Account', icon: Building },
+                    { id: 'card', name: 'Card', icon: CreditCard }
+                  ].map((type) => {
+                    const Icon = type.icon;
+                    return (
+                      <button
+                        key={type.id}
+                        onClick={() => setWithdrawalType(type.id as any)}
+                        className={`p-3 border rounded-lg text-center transition-colors ${
+                          withdrawalType === type.id
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-gray-300 hover:border-indigo-300'
+                        }`}
+                      >
+                        <Icon className="h-6 w-6 mx-auto mb-2" />
+                        <p className="text-xs font-medium">{type.name}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Method Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Method Name
+                </label>
+                <input
+                  type="text"
+                  value={newWithdrawalMethod.name}
+                  onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, name: e.target.value})}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  placeholder="e.g., My M-Pesa, Main Bank Account"
+                />
+              </div>
+
+              {/* Mobile Money Fields */}
+              {withdrawalType === 'mobile' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={newWithdrawalMethod.phoneNumber}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, phoneNumber: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="+254 712 345 678"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Provider
+                    </label>
+                    <select
+                      value={newWithdrawalMethod.provider}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, provider: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    >
+                      <option value="mpesa">M-Pesa</option>
+                      <option value="airtel">Airtel Money</option>
+                      <option value="mtn">MTN Mobile Money</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Account Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.accountHolderName}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, accountHolderName: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="Account holder name"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Bank Account Fields */}
+              {withdrawalType === 'bank' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bank Name
+                    </label>
+                    <select
+                      value={newWithdrawalMethod.bankName}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, bankName: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    >
+                      <option value="">Select Bank</option>
+                      <option value="Equity Bank">Equity Bank</option>
+                      <option value="KCB Bank">KCB Bank</option>
+                      <option value="Co-operative Bank">Co-operative Bank</option>
+                      <option value="Absa Bank">Absa Bank</option>
+                      <option value="Standard Chartered">Standard Chartered</option>
+                      <option value="Diamond Trust Bank">Diamond Trust Bank</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Account Number
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.accountNumber}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, accountNumber: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="Account number"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Account Holder Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.accountHolderName}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, accountHolderName: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="Account holder name"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Card Fields */}
+              {withdrawalType === 'card' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Card Type
+                    </label>
+                    <select
+                      value={newWithdrawalMethod.cardType}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, cardType: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    >
+                      <option value="visa">Visa</option>
+                      <option value="mastercard">Mastercard</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Card Number
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.cardNumber}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, cardNumber: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="1234 5678 9012 3456"
+                      maxLength={19}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Expiry Date
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.expiryDate}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, expiryDate: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="MM/YY"
+                      maxLength={5}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Card Holder Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newWithdrawalMethod.cardHolderName}
+                      onChange={(e) => setNewWithdrawalMethod({...newWithdrawalMethod, cardHolderName: e.target.value})}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      placeholder="Card holder name"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={handleAddWithdrawalMethod}
+                className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Add Method
+              </button>
+              <button
+                onClick={() => setShowAddWithdrawal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Security Settings */}
       <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">

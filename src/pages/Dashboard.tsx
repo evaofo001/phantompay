@@ -14,7 +14,9 @@ import {
   Calendar,
   ToggleLeft,
   ToggleRight,
-  Zap
+  Zap,
+  PiggyBank,
+  Brain
 } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,8 +31,10 @@ const Dashboard: React.FC = () => {
   const quickActions = [
     { name: 'Transfer', href: '/transfer', icon: Send, color: 'from-blue-500 to-blue-600', description: 'Send money' },
     { name: 'Withdraw', href: '/withdraw', icon: Minus, color: 'from-red-500 to-red-600', description: 'Cash out' },
+    { name: 'Loans', href: '/loans', icon: Target, color: 'from-green-500 to-green-600', description: 'Get loans' },
+    { name: 'Savings', href: '/savings', icon: PiggyBank, color: 'from-emerald-500 to-emerald-600', description: 'Save money' },
     { name: 'Rewards', href: '/rewards', icon: Gift, color: 'from-purple-500 to-purple-600', description: 'Earn points' },
-    { name: 'Premium', href: '/premium', icon: Crown, color: 'from-yellow-500 to-orange-600', description: 'Upgrade' },
+    { name: 'AI Coach', href: '/ai-assistant', icon: Brain, color: 'from-indigo-500 to-purple-600', description: 'Get advice' },
   ];
 
   const getTransactionIcon = (type: string, direction: string) => {

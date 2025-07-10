@@ -18,6 +18,8 @@ import Settings from './pages/Settings';
 import Premium from './pages/Premium';
 import Withdraw from './pages/Withdraw';
 import Loans from './pages/Loans';
+import Savings from './pages/Savings';
+import AIAssistant from './pages/AIAssistant';
 
 function App() {
   return (
@@ -74,6 +76,20 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <Loans />
+                      </Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/savings" element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <Savings />
+                      </Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/ai-assistant" element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <AIAssistant />
                       </Layout>
                     </ProtectedRoute>
                   } />
