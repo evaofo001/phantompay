@@ -18,7 +18,14 @@ import {
   Lock,
   Send,
   Eye,
-  EyeOff
+  EyeOff,
+  CreditCard,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Target,
+  Zap,
+  Brain
 } from 'lucide-react';
 import { useAdmin } from '../contexts/AdminContext';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
@@ -35,6 +42,7 @@ const AdminDashboard: React.FC = () => {
   const [transferRecipient, setTransferRecipient] = useState('');
   const [secretCode, setSecretCode] = useState('');
   const [showBalance, setShowBalance] = useState(true);
+  const [chartType, setChartType] = useState<'revenue' | 'expenses'>('revenue');
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -69,21 +77,38 @@ const AdminDashboard: React.FC = () => {
     return dateMatch && typeMatch;
   });
 
-  // Calculate revenue metrics
-  const totalFilteredRevenue = filteredRevenue.reduce((sum, record) => sum + record.amount, 0);
-  const averageRevenue = filteredRevenue.length > 0 ? totalFilteredRevenue / filteredRevenue.length : 0;
+  // Separate revenue and expenses
+  const revenueData = filteredRevenue.filter(record => record.amount > 0);
+  const expenseData = filteredRevenue.filter(record => record.amount < 0);
+
+  // Calculate metrics
+  const totalRevenue = revenueData.reduce((sum, record) => sum + record.amount, 0);
+  const totalExpenses = Math.abs(expenseData.reduce((sum, record) => sum + record.amount, 0));
+  const netProfit = totalRevenue - totalExpenses;
 
   // Revenue by type
-  const revenueByType = filteredRevenue.reduce((acc, record) => {
+  const revenueByType = revenueData.reduce((acc, record) => {
     acc[record.type] = (acc[record.type] || 0) + record.amount;
     return acc;
   }, {} as Record<string, number>);
 
+  // Expense by type
+  const expensesByType = expenseData.reduce((acc, record) => {
+    acc[record.type] = (acc[record.type] || 0) + Math.abs(record.amount);
+    return acc;
+  }, {} as Record<string, number>);
+
   const revenueTypes = [
-    { id: 'transaction_fee', name: 'Transaction Fees', color: 'from-blue-500 to-blue-600' },
-    { id: 'premium_subscription', name: 'Premium Subscriptions', color: 'from-purple-500 to-purple-600' },
-    { id: 'withdrawal_fee', name: 'Withdrawal Fees', color: 'from-red-500 to-red-600' },
-    { id: 'merchant_fee', name: 'Merchant Fees', color: 'from-green-500 to-green-600' }
+    { id: 'transaction_fee', name: 'Transaction Fees', color: 'from-blue-500 to-blue-600', icon: CreditCard },
+    { id: 'premium_subscription', name: 'Premium Subscriptions', color: 'from-purple-500 to-purple-600', icon: Crown },
+    { id: 'withdrawal_fee', name: 'Withdrawal Fees', color: 'from-red-500 to-red-600', icon: ArrowUpRight },
+    { id: 'loan_interest', name: 'Loan Interest', color: 'from-green-500 to-green-600', icon: Target }
+  ];
+
+  const expenseTypes = [
+    { id: 'savings_interest', name: 'Savings Interest', color: 'from-emerald-500 to-emerald-600', icon: TrendingUp },
+    { id: 'reward_points', name: 'Reward Points', color: 'from-yellow-500 to-yellow-600', icon: Zap },
+    { id: 'cashback', name: 'Cashback Payments', color: 'from-orange-500 to-orange-600', icon: ArrowDownRight }
   ];
 
   const handleWithdraw = async () => {
@@ -133,8 +158,8 @@ const AdminDashboard: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">💰 Revenue Control Center</h1>
-          <p className="text-gray-600 mt-1">PhantomPay revenue management and analytics</p>
+          <h1 className="text-3xl font-bold text-gray-900">💼 PhantomPay Admin Control Center</h1>
+          <p className="text-gray-600 mt-1">Your private spaceship cockpit 🛸 - Revenue, loans, and platform management</p>
         </div>
         <div className="flex space-x-3">
           <button
@@ -162,12 +187,51 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Overview Panel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white">
+          <div className="flex items-center justify-between mb-4">
+            <Users className="h-8 w-8" />
+            <span className="text-blue-100 text-sm">Total</span>
+          </div>
+          <p className="text-3xl font-bold">{(platformStats?.totalUsers || 0).toLocaleString()}</p>
+          <p className="text-blue-100">Users</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white">
+          <div className="flex items-center justify-between mb-4">
+            <Activity className="h-8 w-8" />
+            <span className="text-green-100 text-sm">Active</span>
+          </div>
+          <p className="text-3xl font-bold">{(platformStats?.activeUsers || 0).toLocaleString()}</p>
+          <p className="text-green-100">Active Users</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-6 text-white">
+          <div className="flex items-center justify-between mb-4">
+            <Crown className="h-8 w-8" />
+            <span className="text-purple-100 text-sm">Premium</span>
+          </div>
+          <p className="text-3xl font-bold">{(platformStats?.premiumUsers || 0).toLocaleString()}</p>
+          <p className="text-purple-100">Subscribers</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white">
+          <div className="flex items-center justify-between mb-4">
+            <Brain className="h-8 w-8" />
+            <span className="text-orange-100 text-sm">AI Usage</span>
+          </div>
+          <p className="text-3xl font-bold">{(platformStats?.aiAssistantUsage || 0).toLocaleString()}</p>
+          <p className="text-orange-100">Interactions</p>
+        </div>
+      </div>
+
       {/* Admin Revenue Wallet */}
       <div className="bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 rounded-2xl p-8 text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center mb-2">
-              <h2 className="text-2xl font-bold mr-3">💎 Revenue Wallet</h2>
+              <h2 className="text-2xl font-bold mr-3">💎 Boss Wallet (Admin)</h2>
               <button
                 onClick={() => setShowBalance(!showBalance)}
                 className="bg-white bg-opacity-20 p-2 rounded-lg hover:bg-opacity-30 transition-colors"
@@ -180,21 +244,21 @@ const AdminDashboard: React.FC = () => {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <p className="text-green-100 text-sm">Total Revenue Collected</p>
+                <p className="text-green-100 text-sm">💰 Total Revenue</p>
                 <p className="text-xl font-semibold">
                   {showBalance ? formatCurrency(adminWallet?.totalRevenue || 0) : '••••••••'}
                 </p>
               </div>
               <div>
-                <p className="text-green-100 text-sm">This Month</p>
+                <p className="text-green-100 text-sm">💸 Total Expenses</p>
                 <p className="text-xl font-semibold">
-                  {showBalance ? formatCurrency(adminWallet?.monthlyRevenue || 0) : '••••••••'}
+                  {showBalance ? formatCurrency(adminWallet?.totalExpenses || 0) : '••••••••'}
                 </p>
               </div>
               <div>
-                <p className="text-green-100 text-sm">Today</p>
+                <p className="text-green-100 text-sm">📈 Net Profit</p>
                 <p className="text-xl font-semibold">
-                  {showBalance ? formatCurrency(adminWallet?.dailyRevenue || 0) : '••••••••'}
+                  {showBalance ? formatCurrency((adminWallet?.totalRevenue || 0) - (adminWallet?.totalExpenses || 0)) : '••••••••'}
                 </p>
               </div>
             </div>
@@ -205,152 +269,145 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Admin Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Dual Chart Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Revenue Chart */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">🏦 Admin Privileges</h3>
-            <div className="bg-red-100 p-2 rounded-lg">
-              <Lock className="h-6 w-6 text-red-600" />
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">📈 Revenue Breakdown</h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setChartType('revenue')}
+                className={`px-3 py-1 rounded-lg text-sm ${chartType === 'revenue' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
+              >
+                Revenue
+              </button>
+              <button
+                onClick={() => setChartType('expenses')}
+                className={`px-3 py-1 rounded-lg text-sm ${chartType === 'expenses' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}
+              >
+                Expenses
+              </button>
             </div>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center text-sm text-gray-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-              Zero fees on all operations
-            </div>
-            <div className="flex items-center text-sm text-gray-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-              Unlimited withdrawal access
-            </div>
-            <div className="flex items-center text-sm text-gray-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-              Direct revenue transfers
-            </div>
-            <div className="flex items-center text-sm text-gray-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-              Real-time analytics access
-            </div>
+          
+          <div className="space-y-4">
+            {chartType === 'revenue' ? (
+              revenueTypes.map((type) => {
+                const amount = revenueByType[type.id] || 0;
+                const percentage = totalRevenue > 0 ? (amount / totalRevenue) * 100 : 0;
+                const Icon = type.icon;
+                
+                return (
+                  <div key={type.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center">
+                      <div className={`w-10 h-10 bg-gradient-to-r ${type.color} rounded-lg flex items-center justify-center mr-3`}>
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{type.name}</p>
+                        <p className="text-sm text-gray-600">{percentage.toFixed(1)}% of total</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-gray-900">{formatCurrency(amount)}</p>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              expenseTypes.map((type) => {
+                const amount = expensesByType[type.id] || 0;
+                const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+                const Icon = type.icon;
+                
+                return (
+                  <div key={type.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center">
+                      <div className={`w-10 h-10 bg-gradient-to-r ${type.color} rounded-lg flex items-center justify-center mr-3`}>
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{type.name}</p>
+                        <p className="text-sm text-gray-600">{percentage.toFixed(1)}% of total</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-red-600">{formatCurrency(amount)}</p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
+        {/* Loan Management Section */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">📊 Platform Health</h3>
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <Activity className="h-6 w-6 text-blue-600" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">🏦 Loan Management</h3>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center">
+                <Target className="h-8 w-8 text-blue-600 mr-3" />
+                <div>
+                  <p className="font-medium text-blue-900">Total Borrowed</p>
+                  <p className="text-sm text-blue-700">Active loans</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-blue-900">{formatCurrency(platformStats?.totalLoanValue || 0)}</p>
             </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Total Users</span>
-              <span className="font-semibold">{platformStats?.totalUsers?.toLocaleString() || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Active Users</span>
-              <span className="font-semibold text-green-600">{platformStats?.activeUsers?.toLocaleString() || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Premium Users</span>
-              <span className="font-semibold text-purple-600">{platformStats?.premiumUsers?.toLocaleString() || 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Conversion Rate</span>
-              <span className="font-semibold text-orange-600">
-                {platformStats?.totalUsers ? Math.round((platformStats.premiumUsers / platformStats.totalUsers) * 100) : 0}%
-              </span>
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">💸 Transaction Volume</h3>
-            <div className="bg-orange-100 p-2 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-orange-600" />
+            <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center">
+                <DollarSign className="h-8 w-8 text-green-600 mr-3" />
+                <div>
+                  <p className="font-medium text-green-900">Interest Earned</p>
+                  <p className="text-sm text-green-700">From loans</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-green-900">{formatCurrency(revenueByType['loan_interest'] || 0)}</p>
             </div>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(platformStats?.totalVolume || 0)}
-              </p>
-              <p className="text-sm text-gray-600">Total Volume</p>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Avg Transaction</span>
-              <span className="font-semibold">{formatCurrency(platformStats?.averageTransactionSize || 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Total Transactions</span>
-              <span className="font-semibold">{platformStats?.totalTransactions?.toLocaleString() || 0}</span>
+
+            <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-center">
+                <AlertTriangle className="h-8 w-8 text-red-600 mr-3" />
+                <div>
+                  <p className="font-medium text-red-900">Overdue Loans</p>
+                  <p className="text-sm text-red-700">Needs attention</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-red-900">{platformStats?.overdueLoans || 0}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Revenue Analytics */}
+      {/* Savings Summary */}
       <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">📈 Revenue Analytics</h2>
-          <div className="flex space-x-4">
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-            >
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">This Month</option>
-              <option value="all">All Time</option>
-            </select>
-            <select
-              value={revenueFilter}
-              onChange={(e) => setRevenueFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-            >
-              <option value="all">All Revenue Types</option>
-              <option value="transaction_fee">Transaction Fees</option>
-              <option value="premium_subscription">Premium Subscriptions</option>
-              <option value="withdrawal_fee">Withdrawal Fees</option>
-              <option value="merchant_fee">Merchant Fees</option>
-            </select>
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">🏦 Savings Summary</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="text-center p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <TrendingUp className="h-12 w-12 text-emerald-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(platformStats?.totalSavings || 0)}</p>
+            <p className="text-sm text-emerald-700">Total Savings Across Users</p>
+            <p className="text-xs text-emerald-600 mt-1">Not included in revenue</p>
           </div>
-        </div>
 
-        {/* Revenue Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
-            <h3 className="font-semibold text-green-900 mb-2">Total Revenue ({dateFilter})</h3>
-            <p className="text-3xl font-bold text-green-700">{formatCurrency(totalFilteredRevenue)}</p>
+          <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <Clock className="h-12 w-12 text-orange-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-orange-900">{formatCurrency(expensesByType['savings_interest'] || 0)}</p>
+            <p className="text-sm text-orange-700">Interest Liabilities</p>
+            <p className="text-xs text-orange-600 mt-1">Expected payouts</p>
           </div>
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-            <h3 className="font-semibold text-blue-900 mb-2">Average per Transaction</h3>
-            <p className="text-3xl font-bold text-blue-700">{formatCurrency(averageRevenue)}</p>
-          </div>
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
-            <h3 className="font-semibold text-purple-900 mb-2">Total Transactions</h3>
-            <p className="text-3xl font-bold text-purple-700">{filteredRevenue.length}</p>
-          </div>
-        </div>
 
-        {/* Revenue by Type */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {revenueTypes.map((type) => {
-            const amount = revenueByType[type.id] || 0;
-            const percentage = totalFilteredRevenue > 0 ? (amount / totalFilteredRevenue) * 100 : 0;
-            
-            return (
-              <div key={type.id} className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-gray-900">{type.name}</h4>
-                  <div className={`w-3 h-3 rounded-full bg-gradient-to-r ${type.color}`}></div>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(amount)}</p>
-                <p className="text-sm text-gray-600">{percentage.toFixed(1)}% of total</p>
-              </div>
-            );
-          })}
+          <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+            <AlertTriangle className="h-12 w-12 text-red-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-red-900">0</p>
+            <p className="text-sm text-red-700">Emergency Withdrawals</p>
+            <p className="text-xs text-red-600 mt-1">Pending requests</p>
+          </div>
         </div>
       </div>
 
@@ -358,11 +415,23 @@ const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100">
         <div className="p-6 border-b border-gray-100">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">💰 Recent Revenue Records</h2>
-            <button className="flex items-center px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </button>
+            <h2 className="text-xl font-semibold text-gray-900">💰 Recent Revenue & Expense Records</h2>
+            <div className="flex space-x-4">
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              >
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">This Month</option>
+                <option value="all">All Time</option>
+              </select>
+              <button className="flex items-center px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </button>
+            </div>
           </div>
         </div>
 
@@ -395,18 +464,16 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      record.type === 'transaction_fee' ? 'bg-blue-100 text-blue-800' :
-                      record.type === 'premium_subscription' ? 'bg-purple-100 text-purple-800' :
-                      record.type === 'withdrawal_fee' ? 'bg-red-100 text-red-800' :
-                      record.amount < 0 ? 'bg-red-100 text-red-800' :
-                      'bg-green-100 text-green-800'
+                      record.amount > 0 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
                     }`}>
-                      {record.amount < 0 ? 'WITHDRAWAL' : record.type.replace('_', ' ').toUpperCase()}
+                      {record.amount > 0 ? '💰 REVENUE' : '💸 EXPENSE'} - {record.type.replace('_', ' ').toUpperCase()}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <span className={record.amount < 0 ? 'text-red-600' : 'text-green-600'}>
-                      {record.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(record.amount))}
+                    <span className={record.amount > 0 ? 'text-green-600' : 'text-red-600'}>
+                      {record.amount > 0 ? '+' : ''}{formatCurrency(record.amount)}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
@@ -430,7 +497,7 @@ const AdminDashboard: React.FC = () => {
         {filteredRevenue.length === 0 && (
           <div className="text-center py-12">
             <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No revenue records found</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No records found</h3>
             <p className="text-gray-500">Try adjusting your filters or date range</p>
           </div>
         )}

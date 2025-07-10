@@ -13,6 +13,7 @@ import {
   Crown,
   Minus,
   Shield
+  Target
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdmin } from '../contexts/AdminContext';
@@ -32,6 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/', icon: Home },
     { name: 'Transfer', href: '/transfer', icon: Send },
     { name: 'Withdraw', href: '/withdraw', icon: Minus },
+    { name: 'Loans', href: '/loans', icon: Target },
     { name: 'Transactions', href: '/transactions', icon: History },
     { name: 'Rewards', href: '/rewards', icon: Gift },
     { name: 'Premium', href: '/premium', icon: Crown },
