@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Target, TrendingUp, AlertTriangle, CheckCircle, Clock, DollarSign, Calendar, ArrowRight } from 'lucide-react';
+import { Target, TrendingUp, AlertTriangle, CheckCircle, Clock, DollarSign, Calendar, ArrowRight, Calculator } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useLoan } from '../contexts/LoanContext';
 import { format, differenceInDays } from 'date-fns';
@@ -8,7 +8,6 @@ import toast from 'react-hot-toast';
 const Loans: React.FC = () => {
   const { user, savingsAccounts, balance, updateUserBalance } = useWallet();
   const { loans, calculateMaxLoanAmount, calculateLoanInterest, applyForLoan, repayLoan, getLoanEligibility, loading } = useLoan();
-  const [selectedSavingsId, setSelectedSavingsId] = useState('');
   const [loanAmount, setLoanAmount] = useState('');
   const [showApplication, setShowApplication] = useState(false);
   const [repaymentAmount, setRepaymentAmount] = useState('');
@@ -28,23 +27,17 @@ const Loans: React.FC = () => {
   };
 
   const premiumTier = getUserPremiumTier();
-  const eligibleSavings = savingsAccounts.filter(savings => savings.status === 'active');
+  const activeSavings = savingsAccounts.filter(savings => savings.status === 'active');
+  const eligibility = getLoanEligibility(savingsAccounts);
 
   const handleLoanApplication = async () => {
-    if (!selectedSavingsId || !loanAmount) {
-      toast.error('Please select savings account and enter loan amount');
+    if (!loanAmount) {
+      toast.error('Please enter loan amount');
       return;
     }
 
     const amount = parseFloat(loanAmount);
-    const selectedSavings = savingsAccounts.find(s => s.id === selectedSavingsId);
     
-    if (!selectedSavings) {
-      toast.error('Selected savings account not found');
-      return;
-    }
-
-    const eligibility = getLoanEligibility(selectedSavings);
     if (!eligibility.eligible) {
       toast.error(eligibility.reason || 'Not eligible for loan');
       return;
@@ -55,15 +48,27 @@ const Loans: React.FC = () => {
       return;
     }
 
+    // Verify loan + interest doesn't exceed savings value
+    const loanCalculation = calculateLoanInterest(amount, premiumTier);
+    const totalSavingsValue = activeSavings.reduce((total, savings) => {
+      const monthlyRate = savings.annualInterestRate / 12 / 100;
+      const projectedValue = savings.principal * Math.pow(1 + monthlyRate, savings.lockPeriod);
+      return total + projectedValue;
+    }, 0);
+    
+    if (loanCalculation.totalRepayment >= totalSavingsValue) {
+      toast.error('Loan + interest would exceed your total savings value');
+      return;
+    }
+
     try {
-      await applyForLoan(selectedSavingsId, amount, premiumTier);
+      await applyForLoan(amount, premiumTier);
       
       // Add loan amount to user's balance
       const newBalance = balance + amount;
       await updateUserBalance(newBalance);
       
       setShowApplication(false);
-      setSelectedSavingsId('');
       setLoanAmount('');
       
     } catch (error: any) {
@@ -125,38 +130,63 @@ const Loans: React.FC = () => {
       </div>
 
       {/* Loan Rules Info */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">📋 Loan Rules & Requirements</h3>
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-200">
+        <h3 className="text-lg font-semibold text-amber-900 mb-4">📋 Loan Rules & Requirements</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="space-y-2">
-            <div className="flex items-center text-blue-800">
-              <CheckCircle className="h-4 w-4 mr-2 text-blue-600" />
-              Must have active savings account
+            <div className="flex items-center text-amber-800">
+              <CheckCircle className="h-4 w-4 mr-2 text-amber-600" />
+              Must have active savings account(s)
             </div>
-            <div className="flex items-center text-blue-800">
-              <CheckCircle className="h-4 w-4 mr-2 text-blue-600" />
-              Loan ≤ 80% of savings + interest
+            <div className="flex items-center text-amber-800">
+              <Calculator className="h-4 w-4 mr-2 text-amber-600" />
+              Loan + Interest = All Savings + Interest - 1 KES
             </div>
-            <div className="flex items-center text-blue-800">
-              <CheckCircle className="h-4 w-4 mr-2 text-blue-600" />
+            <div className="flex items-center text-amber-800">
+              <CheckCircle className="h-4 w-4 mr-2 text-amber-600" />
               Repayment due before savings maturity
             </div>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center text-blue-800">
+            <div className="flex items-center text-amber-800">
               <AlertTriangle className="h-4 w-4 mr-2 text-orange-600" />
               Auto-deduction if not repaid on time
             </div>
-            <div className="flex items-center text-blue-800">
+            <div className="flex items-center text-amber-800">
               <AlertTriangle className="h-4 w-4 mr-2 text-orange-600" />
               No emergency withdrawals with active loans
             </div>
-            <div className="flex items-center text-blue-800">
+            <div className="flex items-center text-amber-800">
               <TrendingUp className="h-4 w-4 mr-2 text-green-600" />
-              Interest rates: Basic 15%, Plus 12%, VIP 8%
+              Interest rates: Basic 20%, Plus 18%, VIP 15%
             </div>
           </div>
         </div>
+        
+        {/* Combined Savings Summary */}
+        {activeSavings.length > 0 && (
+          <div className="mt-4 p-4 bg-white rounded-lg border border-amber-200">
+            <h4 className="font-medium text-amber-900 mb-2">Your Combined Savings Power 💪</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-amber-700">Total Savings Accounts:</p>
+                <p className="font-semibold text-amber-900">{activeSavings.length}</p>
+              </div>
+              <div>
+                <p className="text-amber-700">Combined Principal:</p>
+                <p className="font-semibold text-amber-900">
+                  {formatCurrency(activeSavings.reduce((sum, s) => sum + s.principal, 0))}
+                </p>
+              </div>
+              <div>
+                <p className="text-amber-700">Max Loan Available:</p>
+                <p className="font-semibold text-green-600">
+                  {eligibility.eligible ? formatCurrency(eligibility.maxAmount) : 'Not Eligible'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Current Balance */}
@@ -166,7 +196,7 @@ const Loans: React.FC = () => {
       </div>
 
       {/* Loan Application */}
-      {eligibleSavings.length > 0 && (
+      {activeSavings.length > 0 && (
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">💰 Apply for Loan</h2>
@@ -180,30 +210,6 @@ const Loans: React.FC = () => {
 
           {showApplication && (
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Savings Account
-                </label>
-                <select
-                  value={selectedSavingsId}
-                  onChange={(e) => setSelectedSavingsId(e.target.value)}
-                  className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
-                >
-                  <option value="">Choose savings account</option>
-                  {eligibleSavings.map((savings) => {
-                    const eligibility = getLoanEligibility(savings);
-                    return (
-                      <option key={savings.id} value={savings.id} disabled={!eligibility.eligible}>
-                        {savings.lockPeriod} Month Savings - {formatCurrency(savings.principal)} 
-                        {eligibility.eligible ? ` (Max: ${formatCurrency(eligibility.maxAmount)})` : ' (Not eligible)'}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {selectedSavingsId && (
-                <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Loan Amount
@@ -214,37 +220,58 @@ const Loans: React.FC = () => {
                       onChange={(e) => setLoanAmount(e.target.value)}
                       className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
                       placeholder="Enter loan amount"
-                      max={(() => {
-                        const selectedSavings = savingsAccounts.find(s => s.id === selectedSavingsId);
-                        return selectedSavings ? getLoanEligibility(selectedSavings).maxAmount : 0;
-                      })()}
+                      max={eligibility.maxAmount}
                     />
                   </div>
 
                   {loanAmount && (
                     <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                      <h3 className="font-medium text-green-900 mb-3">Loan Calculation</h3>
+                      <h3 className="font-medium text-green-900 mb-3">💰 Loan Calculation (Backed by ALL Savings)</h3>
                       {(() => {
                         const amount = parseFloat(loanAmount);
                         if (amount > 0) {
                           const calculation = calculateLoanInterest(amount, premiumTier);
+                          
+                          // Calculate total savings backing
+                          const totalSavingsValue = activeSavings.reduce((total, savings) => {
+                            const monthlyRate = savings.annualInterestRate / 12 / 100;
+                            const projectedValue = savings.principal * Math.pow(1 + monthlyRate, savings.lockPeriod);
+                            return total + projectedValue;
+                          }, 0);
+                          
                           return (
-                            <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="space-y-3 text-sm">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-green-700">Loan Amount:</p>
+                                  <p className="font-semibold text-green-900">{formatCurrency(amount)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-green-700">Interest Rate:</p>
+                                  <p className="font-semibold text-green-900">{calculation.rate}% annual</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-green-700">Total Interest:</p>
+                                  <p className="font-semibold text-green-900">{formatCurrency(calculation.totalInterest)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-green-700">Total Repayment:</p>
+                                  <p className="font-semibold text-green-900">{formatCurrency(calculation.totalRepayment)}</p>
+                                </div>
+                              </div>
+                              <div className="border-t border-green-200 pt-2">
                               <div>
-                                <p className="text-green-700">Loan Amount:</p>
-                                <p className="font-semibold text-green-900">{formatCurrency(amount)}</p>
+                                <p className="text-green-700">Backed by Combined Savings Value:</p>
+                                <p className="font-semibold text-blue-600">{formatCurrency(totalSavingsValue)}</p>
                               </div>
                               <div>
-                                <p className="text-green-700">Interest Rate:</p>
-                                <p className="font-semibold text-green-900">{calculation.rate}% annual</p>
+                                <p className="text-green-700">Safety Margin:</p>
+                                <p className="font-semibold text-green-600">
+                                  {formatCurrency(totalSavingsValue - calculation.totalRepayment)}
+                                </p>
                               </div>
-                              <div>
-                                <p className="text-green-700">Total Interest:</p>
-                                <p className="font-semibold text-green-900">{formatCurrency(calculation.totalInterest)}</p>
-                              </div>
-                              <div>
-                                <p className="text-green-700">Total Repayment:</p>
-                                <p className="font-semibold text-green-900">{formatCurrency(calculation.totalRepayment)}</p>
                               </div>
                             </div>
                           );
@@ -271,9 +298,6 @@ const Loans: React.FC = () => {
                       </>
                     )}
                   </button>
-                </>
-              )}
-            </div>
           )}
         </div>
       )}
@@ -294,7 +318,7 @@ const Loans: React.FC = () => {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="font-semibold text-gray-900">
-                        Loan #{loan.id.slice(-8)}
+                        Combined Savings Loan #{loan.id.slice(-8)}
                       </h3>
                       <p className="text-sm text-gray-600">
                         Interest Rate: {loan.interestRate}%
@@ -420,12 +444,12 @@ const Loans: React.FC = () => {
           <Target className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No Loans Yet</h3>
           <p className="text-gray-500 mb-4">
-            {eligibleSavings.length > 0 
-              ? 'Apply for your first loan using your savings as collateral'
+            {activeSavings.length > 0 
+              ? 'Apply for your first loan using all your savings as collateral'
               : 'Create a savings account first to become eligible for loans'
             }
           </p>
-          {eligibleSavings.length === 0 && (
+          {activeSavings.length === 0 && (
             <button
               onClick={() => window.location.href = '/savings'}
               className="bg-gradient-to-r from-green-600 to-emerald-700 text-white px-6 py-2 rounded-lg font-medium hover:from-green-700 hover:to-emerald-800 transition-all duration-200"
