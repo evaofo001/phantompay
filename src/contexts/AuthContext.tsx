@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { auth as firebaseAuth, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, onAuthStateChanged } from '../config/firebase';
 
 // Mock User interface to match Firebase User
 interface MockUser {
@@ -31,77 +32,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Simulate loading and check for existing session
+  // Use Firebase onAuthStateChanged to manage user session
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Check if user was previously logged in
-      const savedUser = localStorage.getItem('phantompay_user');
-      if (savedUser) {
-        try {
-          setCurrentUser(JSON.parse(savedUser));
-        } catch (error) {
-          console.error('Error parsing saved user:', error);
-          localStorage.removeItem('phantompay_user');
-        }
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      if (user) {
+        // User is signed in
+        setCurrentUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+        // For demo purposes, also store in localStorage to simulate persistence across browser restarts
+        localStorage.setItem('phantompay_user', JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName }));
+      } else {
+        // User is signed out
+        setCurrentUser(null);
+        localStorage.removeItem('phantompay_user');
       }
       setLoading(false);
-    }, 1000);
+    });
 
-    return () => clearTimeout(timer);
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock successful login
-    const mockUser: MockUser = {
-      uid: `user_${Date.now()}`,
-      email,
-      displayName: email.split('@')[0]
-    };
-    
-    setCurrentUser(mockUser);
-    localStorage.setItem('phantompay_user', JSON.stringify(mockUser));
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      // currentUser will be set by onAuthStateChanged listener
+    } catch (error) {
+      setLoading(false);
+      throw error; // Re-throw to be caught by UI
+    }
   };
 
   const register = async (email: string, password: string) => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock successful registration
-    const mockUser: MockUser = {
-      uid: `user_${Date.now()}`,
-      email,
-      displayName: email.split('@')[0]
-    };
-    
-    setCurrentUser(mockUser);
-    localStorage.setItem('phantompay_user', JSON.stringify(mockUser));
+    setLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      // currentUser will be set by onAuthStateChanged listener
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
   };
 
   const loginWithGoogle = async () => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock successful Google login
-    const mockUser: MockUser = {
-      uid: `google_user_${Date.now()}`,
-      email: 'demo@gmail.com',
-      displayName: 'Demo User'
-    };
-    
-    setCurrentUser(mockUser);
-    localStorage.setItem('phantompay_user', JSON.stringify(mockUser));
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(firebaseAuth, provider);
+      // currentUser will be set by onAuthStateChanged listener
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    setCurrentUser(null);
-    localStorage.removeItem('phantompay_user');
+    setLoading(true);
+    try {
+      await signOut(firebaseAuth);
+      // currentUser will be set to null by onAuthStateChanged listener
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
   };
+
+  // Fallback for initial load if onAuthStateChanged hasn't fired yet but localStorage has a user
+  // This helps prevent flickering if the user was already logged in
+  useEffect(() => {
+    if (loading && !currentUser) {
+      const savedUser = localStorage.getItem('phantompay_user');
+      if (savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setCurrentUser(parsedUser);
+        } catch (e) {
+          console.error("Failed to parse user from localStorage", e);
+        }
+      }
+    }
+  }, [loading, currentUser]);
 
   const value = {
     currentUser,

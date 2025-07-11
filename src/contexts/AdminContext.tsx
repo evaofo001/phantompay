@@ -110,6 +110,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           uid: 'admin_wallet',
           balance: 0, // Fresh start - no balance
           totalRevenue: 0,
+          totalExpenses: 0,
+          monthlyExpenses: 0,
+          dailyExpenses: 0,
           monthlyRevenue: 0,
           dailyRevenue: 0,
           lastUpdated: new Date()
@@ -133,6 +136,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         totalTransactions: 0,
         totalVolume: 0,
         averageTransactionSize: 0,
+        totalSavings: 0,
+        totalLoansIssued: 0,
+        totalLoanValue: 0,
+        overdueLoans: 0,
+        totalExpenses: 0,
+        aiAssistantUsage: 0
+
         conversionRate: 0
       };
 
@@ -161,12 +171,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const collectRevenue = async (
-    amount: number, 
+  // This function now handles both revenue (positive amount) and expenses (negative amount)
+  const collectRevenue = async ( // Renamed from collectRevenue to processAdminFinancialEvent for clarity
     type: string, 
     sourceTransactionId: string, 
     sourceUserId: string, 
-    description: string
+    description: string,
+    amount: number // Amount is now the last parameter
   ) => {
     if (!isAdmin || !adminWallet) return;
 
@@ -174,13 +185,14 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Add revenue record
       const newRecord: RevenueRecord = {
         id: `rev_${Date.now()}`,
-        type: type as any,
+        type: type as any, // Cast to any because type can be revenue or expense
         amount,
         sourceTransactionId,
         sourceUserId,
         timestamp: new Date(),
         description,
-        status: 'collected'
+        status: 'collected', // Assuming all collected/deducted are 'collected'
+        category: amount > 0 ? 'revenue' : 'expense' // Categorize based on amount
       };
 
       setRevenueRecords(prev => [newRecord, ...prev]);
@@ -193,9 +205,12 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updatedWallet = {
         ...adminWallet,
         balance: adminWallet.balance + amount,
-        totalRevenue: adminWallet.totalRevenue + amount,
-        monthlyRevenue: adminWallet.monthlyRevenue + amount,
-        dailyRevenue: adminWallet.dailyRevenue + amount,
+        totalRevenue: amount > 0 ? adminWallet.totalRevenue + amount : adminWallet.totalRevenue,
+        totalExpenses: amount < 0 ? adminWallet.totalExpenses + Math.abs(amount) : adminWallet.totalExpenses,
+        monthlyRevenue: amount > 0 ? adminWallet.monthlyRevenue + amount : adminWallet.monthlyRevenue,
+        monthlyExpenses: amount < 0 ? adminWallet.monthlyExpenses + Math.abs(amount) : adminWallet.monthlyExpenses,
+        dailyRevenue: amount > 0 ? adminWallet.dailyRevenue + amount : adminWallet.dailyRevenue,
+        dailyExpenses: amount < 0 ? adminWallet.dailyExpenses + Math.abs(amount) : adminWallet.dailyExpenses,
         lastUpdated: new Date()
       };
 
@@ -230,19 +245,25 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setLoading(true);
 
       // Add withdrawal record
-      const withdrawalRecord: RevenueRecord = {
-        id: `withdrawal_${Date.now()}`,
-        type: 'withdrawal_fee' as any,
-        amount: -amount, // Negative amount for withdrawal
-        sourceTransactionId: `admin_withdrawal_${Date.now()}`,
-        sourceUserId: currentUser?.uid || 'admin',
-        timestamp: new Date(),
-        description: `Admin withdrawal of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}`,
-        status: 'collected'
-      };
+      // Use the collectRevenue function which now handles both revenue and expenses
+      await collectRevenue(
+        'admin_withdrawal', // New type for admin-initiated withdrawals
+        `admin_withdrawal_${Date.now()}`,
+        currentUser?.uid || 'admin',
+        `Admin withdrawal of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}`,
+        -amount // Pass negative amount for expense
+      );
 
-      setRevenueRecords(prev => [withdrawalRecord, ...prev]);
-      
+      // The admin wallet balance is already updated by collectRevenue,
+      // but we need to ensure totalExpenses are also updated.
+      // The collectRevenue function now handles this categorization.
+
+      // Old manual update (now handled by collectRevenue):
+      // const updatedWallet = {
+      //   ...adminWallet,
+      //   balance: adminWallet.balance - amount,
+      //   lastUpdated: new Date()
+      // };
       // Save to localStorage
       const updatedRecords = [withdrawalRecord, ...revenueRecords];
       localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));
@@ -294,19 +315,25 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setLoading(true);
 
       // Add transfer record
-      const transferRecord: RevenueRecord = {
-        id: `transfer_${Date.now()}`,
-        type: 'transaction_fee' as any,
-        amount: -amount, // Negative amount for transfer
-        sourceTransactionId: `admin_transfer_${Date.now()}`,
-        sourceUserId: currentUser?.uid || 'admin',
-        timestamp: new Date(),
-        description: `Admin transfer of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} to ${recipient}`,
-        status: 'collected'
-      };
+      // Use the collectRevenue function which now handles both revenue and expenses
+      await collectRevenue(
+        'admin_transfer', // New type for admin-initiated transfers
+        `admin_transfer_${Date.now()}`,
+        currentUser?.uid || 'admin',
+        `Admin transfer of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} to ${recipient}`,
+        -amount // Pass negative amount for expense
+      );
 
-      setRevenueRecords(prev => [transferRecord, ...prev]);
-      
+      // The admin wallet balance is already updated by collectRevenue,
+      // but we need to ensure totalExpenses are also updated.
+      // The collectRevenue function now handles this categorization.
+
+      // Old manual update (now handled by collectRevenue):
+      // const updatedWallet = {
+      //   ...adminWallet,
+      //   balance: adminWallet.balance - amount,
+      //   lastUpdated: new Date()
+      // };
       // Save to localStorage
       const updatedRecords = [transferRecord, ...revenueRecords];
       localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));

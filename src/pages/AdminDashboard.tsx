@@ -102,7 +102,10 @@ const AdminDashboard: React.FC = () => {
     { id: 'transaction_fee', name: 'Transaction Fees', color: 'from-blue-500 to-blue-600', icon: CreditCard },
     { id: 'premium_subscription', name: 'Premium Subscriptions', color: 'from-purple-500 to-purple-600', icon: Crown },
     { id: 'withdrawal_fee', name: 'Withdrawal Fees', color: 'from-red-500 to-red-600', icon: ArrowUpRight },
-    { id: 'loan_interest', name: 'Loan Interest', color: 'from-green-500 to-green-600', icon: Target }
+    { id: 'loan_interest', name: 'Loan Interest', color: 'from-green-500 to-green-600', icon: Target },
+    { id: 'early_withdrawal_penalty', name: 'Early Withdrawal Penalties', color: 'from-orange-500 to-orange-600', icon: AlertTriangle },
+    { id: 'admin_withdrawal', name: 'Admin Withdrawals', color: 'from-red-700 to-red-800', icon: Minus },
+    { id: 'admin_transfer', name: 'Admin Transfers', color: 'from-blue-700 to-blue-800', icon: Send }
   ];
 
   const expenseTypes = [

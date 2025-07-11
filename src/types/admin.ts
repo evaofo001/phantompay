@@ -8,7 +8,7 @@ export interface AdminUser {
 
 export interface RevenueRecord {
   id: string;
-  type: 'transaction_fee' | 'premium_subscription' | 'withdrawal_fee' | 'merchant_fee' | 'loan_interest' | 'savings_interest' | 'reward_points' | 'cashback';
+  type: 'transaction_fee' | 'premium_subscription' | 'withdrawal_fee' | 'merchant_fee' | 'loan_interest' | 'savings_interest' | 'reward_points' | 'cashback' | 'early_withdrawal_penalty';
   amount: number;
   sourceTransactionId?: string;
   sourceUserId: string;
@@ -23,9 +23,12 @@ export interface AdminWallet {
   balance: number;
   totalRevenue: number;
   totalExpenses: number;
+  totalExpenses: number;
   monthlyRevenue: number;
   monthlyExpenses: number;
+  monthlyExpenses: number;
   dailyRevenue: number;
+  dailyExpenses: number;
   dailyExpenses: number;
   lastUpdated: Date;
 }

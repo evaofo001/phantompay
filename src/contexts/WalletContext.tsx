@@ -243,6 +243,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const newBalance = balance - totalDeduction;
       await updateUserBalance(newBalance);
 
+      // Add transaction record
       await addTransaction({
         uid: currentUser.uid,
         type: 'send',
@@ -255,13 +256,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         direction: '-'
       });
       
-      // Add reward points based on premium tier
+      // Add reward points (cashback) based on premium tier
       const cashbackRate = premiumTier === 'vip' ? 0.05 : premiumTier === 'plus' ? 0.02 : 0;
       if (cashbackRate > 0) {
         const rewardPointsEarned = Math.floor(amount * cashbackRate);
         if (rewardPointsEarned > 0) {
-          await updateUserBalance(newBalance, undefined, rewardPoints + rewardPointsEarned);
+          await addRewardPoints(rewardPointsEarned); // Use addRewardPoints to also record admin expense
           toast.success(`Earned ${rewardPointsEarned} cashback points! 🎉`);
+          // Note: updateUserBalance is called implicitly by addRewardPoints for rewardPoints
         }
       }
     } finally {
@@ -477,6 +479,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (isEarly) {
         penalty = savingsAccount.principal * 0.05; // 5% penalty
         withdrawalAmount = savingsAccount.principal - penalty;
+
+        // Collect penalty as revenue for admin
+        await collectRevenue(
+            penalty, // Amount is the penalty
+            'early_withdrawal_penalty', // New type for clarity
+            savingsId, // Source transaction ID
+            currentUser.uid, // Source user ID
+            `Early savings withdrawal penalty from account ${savingsId}`
+        );
+
       } else {
         // Calculate interest for matured savings
         const monthsElapsed = savingsAccount.lockPeriod;
@@ -486,14 +498,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         withdrawalAmount = totalValue;
       }
 
+      // Update user's wallet balance
       const newBalance = balance + withdrawalAmount;
       const newSavingsBalance = savingsBalance - savingsAccount.principal;
       await updateUserBalance(newBalance, newSavingsBalance);
 
       // If there's interest to be paid, it comes from admin wallet (expense)
       if (interestEarned > 0) {
-        await collectRevenue(
-          -interestEarned, // Negative amount = expense
+        // This is an expense for the admin, so we record it as such
+        await collectRevenue( // This function handles both revenue (positive) and expense (negative)
           'savings_interest',
           savingsId,
           currentUser.uid,
@@ -501,6 +514,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         );
       }
 
+      // Add transaction record for the user
       await addTransaction({
         uid: currentUser.uid,
         type: 'savings_withdrawal',
@@ -523,13 +537,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addRewardPoints = async (points: number) => {
     if (!currentUser) return;
     
-    // Calculate cost of reward points (1 point = 0.1 KES)
-    const pointsCost = Math.abs(points) * 0.1;
-    
-    if (points < 0) {
-      // Redeeming points - this is an expense from admin wallet
-      await collectRevenue(
-        -pointsCost, // Negative amount = expense
+    // If points are being added (positive), it's a potential future liability/expense
+    // If points are being redeemed (negative), it's an immediate expense
+    const pointsValue = points * 0.1; // 1 point = 0.1 KES
+
+    // Record this as an expense for the admin wallet
+    // collectRevenue handles positive for revenue, negative for expense
+    await collectRevenue(
         'reward_points',
         `reward_redemption_${Date.now()}`,
         currentUser.uid,
