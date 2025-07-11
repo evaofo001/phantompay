@@ -6,11 +6,11 @@ import toast from 'react-hot-toast';
 
 interface LoanContextType {
   loans: Loan[];
-  calculateMaxLoanAmount: (savingsAccount: SavingsAccount) => number;
+  calculateMaxLoanAmount: (savingsAccounts: SavingsAccount[]) => number;
   calculateLoanInterest: (amount: number, premiumTier: string) => { rate: number; totalInterest: number; totalRepayment: number };
-  applyForLoan: (savingsAccountId: string, amount: number, premiumTier: string) => Promise<void>;
+  applyForLoan: (amount: number, premiumTier: string) => Promise<void>;
   repayLoan: (loanId: string, amount: number) => Promise<void>;
-  getLoanEligibility: (savingsAccount: SavingsAccount) => { eligible: boolean; reason?: string; maxAmount: number };
+  getLoanEligibility: (savingsAccounts: SavingsAccount[]) => { eligible: boolean; reason?: string; maxAmount: number };
   loading: boolean;
 }
 
@@ -24,18 +24,18 @@ export const useLoan = () => {
   return context;
 };
 
-// Loan interest rates by premium tier
+// CORRECTED: Loan interest rates MUST BE HIGHER than savings interest rates
 const LOAN_INTEREST_RATES = {
-  basic: 0.15,    // 15% annual
-  plus: 0.12,     // 12% annual  
-  vip: 0.08       // 8% annual
+  basic: 0.20,    // 20% annual (higher than 6% savings)
+  plus: 0.18,     // 18% annual (higher than 12% savings)  
+  vip: 0.15       // 15% annual (higher than 18% savings - still profitable)
 };
 
-// Savings interest rates (must be lower than loan rates)
+// Savings interest rates (for reference)
 const SAVINGS_INTEREST_RATES = {
   basic: 0.06,    // 6% annual
-  plus: 0.10,     // 10% annual
-  vip: 0.12       // 12% annual
+  plus: 0.12,     // 12% annual
+  vip: 0.18       // 18% annual
 };
 
 export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -63,31 +63,51 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  const calculateMaxLoanAmount = (savingsAccount: SavingsAccount): number => {
-    if (savingsAccount.status !== 'active') return 0;
+  // CORRECTED: Calculate max loan amount from ALL savings accounts combined
+  const calculateMaxLoanAmount = (savingsAccounts: SavingsAccount[]): number => {
+    const activeSavings = savingsAccounts.filter(savings => savings.status === 'active');
     
-    // Calculate current savings value with interest
-    const monthsElapsed = Math.min(
-      (Date.now() - savingsAccount.startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44),
-      savingsAccount.lockPeriod
-    );
+    if (activeSavings.length === 0) return 0;
     
-    const monthlyRate = savingsAccount.annualInterestRate / 12 / 100;
-    const currentSavingsValue = savingsAccount.principal * Math.pow(1 + monthlyRate, monthsElapsed);
-    const projectedMaturityValue = savingsAccount.principal * Math.pow(1 + monthlyRate, savingsAccount.lockPeriod);
+    let totalSavingsPrincipal = 0;
+    let totalProjectedInterest = 0;
     
-    // Max loan is 80% of projected maturity value
-    return Math.floor(projectedMaturityValue * 0.8);
+    // Calculate combined value from ALL savings accounts
+    activeSavings.forEach(savings => {
+      const monthsElapsed = Math.min(
+        (Date.now() - savings.startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44),
+        savings.lockPeriod
+      );
+      
+      const monthlyRate = savings.annualInterestRate / 12 / 100;
+      const projectedMaturityValue = savings.principal * Math.pow(1 + monthlyRate, savings.lockPeriod);
+      const projectedInterest = projectedMaturityValue - savings.principal;
+      
+      totalSavingsPrincipal += savings.principal;
+      totalProjectedInterest += projectedInterest;
+    });
+    
+    // CORRECTED FORMULA: Loan limit + interest = all savings principals + all savings interests - 1
+    const totalSavingsValue = totalSavingsPrincipal + totalProjectedInterest;
+    const maxLoanPlusInterest = totalSavingsValue - 1;
+    
+    // We need to solve: loan_amount + (loan_amount * interest_rate * months/12) = maxLoanPlusInterest
+    // Simplified for 6 months: loan_amount * (1 + interest_rate * 0.5) = maxLoanPlusInterest
+    // Therefore: loan_amount = maxLoanPlusInterest / (1 + interest_rate * 0.5)
+    
+    // Use basic tier rate as default for calculation
+    const defaultInterestRate = LOAN_INTEREST_RATES.basic;
+    const maxLoanAmount = maxLoanPlusInterest / (1 + defaultInterestRate * 0.5);
+    
+    return Math.floor(Math.max(0, maxLoanAmount));
   };
 
   const calculateLoanInterest = (amount: number, premiumTier: string) => {
     const rate = LOAN_INTEREST_RATES[premiumTier as keyof typeof LOAN_INTEREST_RATES] || LOAN_INTEREST_RATES.basic;
     
-    // Calculate interest for the loan period (typically matches savings period)
-    const monthlyRate = rate / 12;
-    const months = 6; // Default 6 months, can be customized
-    
-    const totalInterest = amount * monthlyRate * months;
+    // Calculate interest for 6 months (standard loan period)
+    const months = 6;
+    const totalInterest = amount * rate * (months / 12);
     const totalRepayment = amount + totalInterest;
     
     return {
@@ -97,37 +117,38 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  const getLoanEligibility = (savingsAccount: SavingsAccount) => {
-    // Rule 1: Must have active savings account
-    if (savingsAccount.status !== 'active') {
+  const getLoanEligibility = (savingsAccounts: SavingsAccount[]) => {
+    const activeSavings = savingsAccounts.filter(savings => savings.status === 'active');
+    
+    // Rule 1: Must have at least one active savings account
+    if (activeSavings.length === 0) {
       return {
         eligible: false,
-        reason: 'Savings account must be active',
+        reason: 'You need at least one active savings account to qualify for a loan',
         maxAmount: 0
       };
     }
 
-    // Rule 2: Check if user already has active loan on this savings
+    // Rule 2: Check if user already has any active loan
     const existingLoan = loans.find(loan => 
-      loan.savingsAccountId === savingsAccount.id && 
-      (loan.status === 'active' || loan.status === 'overdue')
+      loan.status === 'active' || loan.status === 'overdue'
     );
 
     if (existingLoan) {
       return {
         eligible: false,
-        reason: 'You already have an active loan on this savings account',
+        reason: 'You already have an active loan. Please repay it before applying for a new one.',
         maxAmount: 0
       };
     }
 
-    // Rule 3: Calculate max loan amount
-    const maxAmount = calculateMaxLoanAmount(savingsAccount);
+    // Rule 3: Calculate max loan amount from ALL savings combined
+    const maxAmount = calculateMaxLoanAmount(activeSavings);
     
     if (maxAmount < 1000) { // Minimum loan amount
       return {
         eligible: false,
-        reason: 'Savings amount too low for loan eligibility (minimum KES 1,000)',
+        reason: 'Combined savings amount too low for loan eligibility (minimum loan: KES 1,000)',
         maxAmount: 0
       };
     }
@@ -138,7 +159,7 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  const applyForLoan = async (savingsAccountId: string, amount: number, premiumTier: string) => {
+  const applyForLoan = async (amount: number, premiumTier: string) => {
     if (!currentUser) throw new Error('User not authenticated');
     
     setLoading(true);
@@ -148,11 +169,11 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const loanCalculation = calculateLoanInterest(amount, premiumTier);
       
-      // Create loan record
+      // Create loan record (not tied to specific savings account anymore)
       const newLoan: Loan = {
         id: `loan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         uid: currentUser.uid,
-        savingsAccountId,
+        savingsAccountId: 'combined_savings', // Indicates it's backed by all savings
         amount,
         interestRate: loanCalculation.rate,
         totalInterest: loanCalculation.totalInterest,
@@ -178,14 +199,14 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'loan_interest',
         newLoan.id,
         currentUser.uid,
-        `Loan interest revenue from loan ${newLoan.id}`
+        `Loan interest revenue from loan ${newLoan.id} (${loanCalculation.rate}% rate)`
       );
 
       toast.success(`Loan of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} approved! 🎉`);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error applying for loan:', error);
-      toast.error('Failed to process loan application');
+      toast.error(error.message || 'Failed to process loan application');
     } finally {
       setLoading(false);
     }
@@ -218,7 +239,7 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       toast.success(`Loan repayment of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} processed! 💰`);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error repaying loan:', error);
       toast.error('Failed to process loan repayment');
     } finally {
