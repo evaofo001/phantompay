@@ -262,17 +262,17 @@ const Loans: React.FC = () => {
                                 </div>
                               </div>
                               <div className="border-t border-green-200 pt-2">
-                              <div>
-                                <p className="text-green-700">Backed by Combined Savings Value:</p>
-                                <p className="font-semibold text-blue-600">{formatCurrency(totalSavingsValue)}</p>
-                              </div>
-                              <div>
-                                <p className="text-green-700">Safety Margin:</p>
-                                <p className="font-semibold text-green-600">
-                                  {formatCurrency(totalSavingsValue - calculation.totalRepayment)}
-                                </p>
-                              </div>
-                              </div>
+                                     <div>
+                                       <p className="text-green-700">Backed by Combined Savings Value:</p>
+                                       <p className="font-semibold text-blue-600">{formatCurrency(totalSavingsValue)}</p>
+                                     </div>
+                                     <div>
+                                       <p className="text-green-700">Safety Margin:</p>
+                                       <p className="font-semibold text-green-600">
+                                         {formatCurrency(totalSavingsValue - calculation.totalRepayment)}
+                                       </p>
+                                     </div>
+                                   </div>
                             </div>
                           );
                         }
@@ -298,7 +298,8 @@ const Loans: React.FC = () => {
                       </>
                     )}
                   </button>
-          )}
+                   </div>
+                 )}
         </div>
       )}
 
