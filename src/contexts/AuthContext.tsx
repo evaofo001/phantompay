@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth as firebaseAuth, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, onAuthStateChanged } from '../config/firebase';
+import { sendEmailLink, completeEmailLinkSignIn, isEmailLinkSignIn } from '../utils/emailLinkAuth';
 
 // Mock User interface to match Firebase User
 interface MockUser {
@@ -13,6 +14,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  sendEmailSignInLink: (email: string) => Promise<void>;
+  completeEmailSignIn: (email?: string) => Promise<void>;
+  isEmailLinkAuth: () => boolean;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -90,6 +94,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendEmailSignInLink = async (email: string) => {
+    setLoading(true);
+    try {
+      await sendEmailLink(email);
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeEmailSignIn = async (email?: string) => {
+    setLoading(true);
+    try {
+      await completeEmailLinkSignIn(email);
+      // currentUser will be set by onAuthStateChanged listener
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const isEmailLinkAuth = (): boolean => {
+    return isEmailLinkSignIn();
+  };
   const logout = async () => {
     setLoading(true);
     try {
@@ -122,6 +152,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     register,
     loginWithGoogle,
+    sendEmailSignInLink,
+    completeEmailSignIn,
+    isEmailLinkAuth,
     logout,
     loading
   };
