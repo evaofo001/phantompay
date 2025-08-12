@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getStoredEmailForSignIn } from '../utils/emailLinkAuth';
 import toast from 'react-hot-toast';
 
 interface LoginForm {
@@ -22,6 +23,7 @@ interface VerificationForm {
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isEmailLink, setIsEmailLink] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -29,15 +31,29 @@ const LoginPage: React.FC = () => {
   const [pendingEmail, setPendingEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   
-  const { currentUser, login, register, loginWithGoogle } = useAuth();
+  const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth } = useAuth();
   
   const loginForm = useForm<LoginForm>();
   const registerForm = useForm<RegisterForm>();
   const verificationForm = useForm<VerificationForm>();
+  const emailLinkForm = useForm<{ email: string }>();
 
   if (currentUser) {
     return <Navigate to="/" replace />;
   }
+
+  // Check if this is an email link sign-in on component mount
+  React.useEffect(() => {
+    if (isEmailLinkAuth()) {
+      const storedEmail = getStoredEmailForSignIn();
+      if (storedEmail) {
+        handleCompleteEmailLinkSignIn(storedEmail);
+      } else {
+        setIsEmailLink(true);
+        setIsLogin(true);
+      }
+    }
+  }, []);
 
   const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -172,6 +188,32 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  const handleSendEmailLink = async (data: { email: string }) => {
+    setLoading(true);
+    try {
+      await sendEmailSignInLink(data.email);
+      toast.success(`Sign-in link sent to ${data.email}! Check your inbox.`);
+      setPendingEmail(data.email);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send email link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteEmailLinkSignIn = async (email?: string) => {
+    setLoading(true);
+    try {
+      await completeEmailSignIn(email);
+      toast.success('Successfully signed in with email link! 🎉');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to complete email link sign-in');
+      setIsEmailLink(true); // Show email input form
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -192,8 +234,80 @@ const LoginPage: React.FC = () => {
 
         {/* Main Form Container */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
+          {/* Email Link Sign-in Form */}
+          {isEmailLink && (
+            <>
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-blue-100 p-3 rounded-full">
+                    <LinkIcon className="h-8 w-8 text-blue-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                  Complete Email Link Sign-in
+                </h3>
+                <p className="text-gray-600 text-center mt-2">
+                  Please confirm your email address to complete sign-in
+                </p>
+              </div>
+
+              <form onSubmit={emailLinkForm.handleSubmit(handleCompleteEmailLinkSignIn)} className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      {...emailLinkForm.register('email', { 
+                        required: 'Email is required',
+                        pattern: {
+                          value: /^\S+@\S+$/i,
+                          message: 'Invalid email address'
+                        }
+                      })}
+                      type="email"
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors"
+                      placeholder="Enter your email"
+                      defaultValue={getStoredEmailForSignIn() || ''}
+                    />
+                  </div>
+                  {emailLinkForm.formState.errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{emailLinkForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Completing Sign-in...
+                    </div>
+                  ) : (
+                    'Complete Sign-in'
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => setIsEmailLink(false)}
+                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                >
+                  Back to regular sign-in
+                </button>
+              </div>
+            </>
+          )}
+
           {/* Login Form */}
-          {isLogin && (
+          {isLogin && !isEmailLink && (
             <>
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 text-center">
@@ -279,11 +393,63 @@ const LoginPage: React.FC = () => {
                   )}
                 </button>
               </form>
+
+              {/* Email Link Option */}
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or</span>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <form onSubmit={emailLinkForm.handleSubmit(handleSendEmailLink)} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Sign in with Email Link (Passwordless)
+                      </label>
+                      <div className="flex space-x-2">
+                        <div className="flex-1 relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Mail className="h-5 w-5 text-gray-400" />
+                          </div>
+                          <input
+                            {...emailLinkForm.register('email', { 
+                              required: 'Email is required',
+                              pattern: {
+                                value: /^\S+@\S+$/i,
+                                message: 'Invalid email address'
+                              }
+                            })}
+                            type="email"
+                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
+                            placeholder="Enter your email"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                        >
+                          <LinkIcon className="h-4 w-4 mr-1" />
+                          Send Link
+                        </button>
+                      </div>
+                      {emailLinkForm.formState.errors.email && (
+                        <p className="mt-1 text-sm text-red-600">{emailLinkForm.formState.errors.email.message}</p>
+                      )}
+                    </div>
+                  </form>
+                </div>
+              </div>
             </>
           )}
 
           {/* Registration Form */}
-          {!isLogin && registrationStep === 'form' && (
+          {!isLogin && !isEmailLink && registrationStep === 'form' && (
             <>
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 text-center">
@@ -414,7 +580,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Email Verification Step */}
-          {!isLogin && registrationStep === 'verification' && (
+          {!isLogin && !isEmailLink && registrationStep === 'verification' && (
             <>
               <div className="mb-6">
                 <div className="flex items-center justify-center mb-4">
@@ -498,7 +664,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Google Sign In - Only show for login or registration form */}
-          {(isLogin || registrationStep === 'form') && (
+          {(isLogin || registrationStep === 'form') && !isEmailLink && (
             <>
               <div className="mt-6">
                 <div className="relative">
@@ -506,7 +672,7 @@ const LoginPage: React.FC = () => {
                     <div className="w-full border-t border-gray-300" />
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                    <span className="px-2 bg-white text-gray-500">Or continue with Google</span>
                   </div>
                 </div>
 
@@ -531,6 +697,7 @@ const LoginPage: React.FC = () => {
                 <button
                   onClick={() => {
                     setIsLogin(!isLogin);
+                    setIsEmailLink(false);
                     setRegistrationStep('form');
                     setPendingEmail('');
                   }}
@@ -540,6 +707,21 @@ const LoginPage: React.FC = () => {
                 </button>
               </div>
             </>
+          )}
+
+          {/* Show pending email link message */}
+          {pendingEmail && !isEmailLink && (
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center">
+                <Mail className="h-5 w-5 text-blue-600 mr-2" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Email Link Sent!</p>
+                  <p className="text-sm text-blue-700">
+                    Check your inbox at {pendingEmail} and click the sign-in link.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

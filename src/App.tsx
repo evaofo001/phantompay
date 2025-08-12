@@ -20,6 +20,7 @@ import Withdraw from './pages/Withdraw';
 import Loans from './pages/Loans';
 import Savings from './pages/Savings';
 import AIAssistant from './pages/AIAssistant';
+import EmailLinkHandler from './components/EmailLinkHandler';
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
               <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
+                  <Route path="/auth/email-link" element={<EmailLinkHandler />} />
                   
                   {/* Admin Routes */}
                   <Route path="/admin" element={
