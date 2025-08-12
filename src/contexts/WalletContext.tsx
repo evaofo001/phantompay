@@ -133,6 +133,36 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const depositMoney = async (amount: number, method: string) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
+    try {
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Update user balance
+      const newBalance = balance + amount;
+      await updateUserBalance(newBalance);
+
+      // Add transaction record
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'deposit',
+        amount,
+        description: `Deposit via ${method}`,
+        status: 'completed',
+        direction: '+',
+        method
+      });
+
+    } catch (error: any) {
+      console.error('Error depositing money:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
   const createSavingsAccount = async (account: Omit<SavingsAccount, 'id' | 'createdAt' | 'status'>) => {
     if (!currentUser) return;
 
@@ -175,6 +205,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     savingsAccounts,
     updateUserBalance,
     addTransaction,
+    depositMoney,
     createSavingsAccount,
     updateSavingsAccount,
     loading
