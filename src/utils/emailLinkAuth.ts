@@ -9,7 +9,7 @@ import { auth } from '../config/firebase';
 // Action code settings for email link authentication
 export const actionCodeSettings: ActionCodeSettings = {
   // URL you want to redirect back to. The domain must be in the authorized domains list in the Firebase Console.
-  url: window.location.origin + '/auth/email-link',
+  url: `${window.location.protocol}//${window.location.host}/auth/email-link`,
   // This must be true for email link authentication
   handleCodeInApp: true,
   iOS: {
