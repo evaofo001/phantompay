@@ -25,7 +25,9 @@ import {
   Clock,
   Target,
   Zap,
-  Brain
+  Brain,
+  FileText,
+  TrendingDown
 } from 'lucide-react';
 import { useAdmin } from '../contexts/AdminContext';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
@@ -43,6 +45,38 @@ const AdminDashboard: React.FC = () => {
   const [secretCode, setSecretCode] = useState('');
   const [showBalance, setShowBalance] = useState(true);
   const [chartType, setChartType] = useState<'revenue' | 'expenses'>('revenue');
+
+  // Export functionality
+  const exportToCSV = (data: any[], filename: string) => {
+    const headers = Object.keys(data[0] || {});
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportRevenue = () => {
+    const exportData = filteredRevenue.map(record => ({
+      Date: format(record.timestamp, 'yyyy-MM-dd HH:mm:ss'),
+      Type: record.type.replace('_', ' ').toUpperCase(),
+      Amount: record.amount,
+      Description: record.description,
+      Status: record.status.toUpperCase(),
+      Category: record.amount > 0 ? 'REVENUE' : 'EXPENSE'
+    }));
+    exportToCSV(exportData, 'phantompay_revenue_records');
+    toast.success('Revenue data exported successfully!');
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -85,6 +119,14 @@ const AdminDashboard: React.FC = () => {
   const totalRevenue = revenueData.reduce((sum, record) => sum + record.amount, 0);
   const totalExpenses = Math.abs(expenseData.reduce((sum, record) => sum + record.amount, 0));
   const netProfit = totalRevenue - totalExpenses;
+  
+  // Calculate loan repayment rate
+  const loanRepaymentRate = platformStats?.totalLoansIssued > 0 
+    ? ((platformStats.totalLoansIssued - (platformStats.overdueLoans || 0)) / platformStats.totalLoansIssued * 100)
+    : 0;
+
+  // Calculate active vs dormant users
+  const dormantUsers = (platformStats?.totalUsers || 0) - (platformStats?.activeUsers || 0);
 
   // Revenue by type
   const revenueByType = revenueData.reduce((acc, record) => {
@@ -199,6 +241,10 @@ const AdminDashboard: React.FC = () => {
           </div>
           <p className="text-3xl font-bold">{(platformStats?.totalUsers || 0).toLocaleString()}</p>
           <p className="text-blue-100">Users</p>
+          <div className="mt-2 text-sm text-blue-100">
+            Active: {(platformStats?.activeUsers || 0).toLocaleString()} | 
+            Dormant: {dormantUsers.toLocaleString()}
+          </div>
         </div>
 
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white">
@@ -226,6 +272,66 @@ const AdminDashboard: React.FC = () => {
           </div>
           <p className="text-3xl font-bold">{(platformStats?.aiAssistantUsage || 0).toLocaleString()}</p>
           <p className="text-orange-100">Interactions</p>
+        </div>
+      </div>
+
+      {/* Advanced Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">📊 Loan Metrics</h3>
+            <Target className="h-6 w-6 text-green-600" />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-gray-600">Repayment Rate</p>
+              <p className="text-2xl font-bold text-green-600">{loanRepaymentRate.toFixed(1)}%</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Average Loan</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {formatCurrency((platformStats?.totalLoanValue || 0) / Math.max(platformStats?.totalLoansIssued || 1, 1))}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">👥 User Activity</h3>
+            <Activity className="h-6 w-6 text-blue-600" />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-gray-600">Active Users</p>
+              <p className="text-2xl font-bold text-green-600">{(platformStats?.activeUsers || 0).toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Dormant Users</p>
+              <p className="text-2xl font-bold text-red-600">{dormantUsers.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">💰 Transaction Heatmap</h3>
+            <BarChart3 className="h-6 w-6 text-purple-600" />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-gray-600">Avg Transaction Size</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {formatCurrency(platformStats?.averageTransactionSize || 0)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Volume</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {formatCurrency(platformStats?.totalVolume || 0)}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -469,7 +575,7 @@ const AdminDashboard: React.FC = () => {
               </select>
               <button className="flex items-center px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                 <Download className="h-4 w-4 mr-2" />
-                Export CSV
+                <span onClick={handleExportRevenue}>Export CSV</span>
               </button>
             </div>
           </div>

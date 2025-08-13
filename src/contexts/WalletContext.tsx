@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { User, Transaction, SavingsAccount } from '../types';
+import { detectSuspiciousActivity, generateSecurityAuditLog } from '../utils/securityUtils';
+import { checkRateLimit } from '../utils/rateLimiter';
 import toast from 'react-hot-toast';
 
 interface WalletContextType {
@@ -118,6 +120,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser) return;
 
     try {
+      // Security checks
+      const suspiciousPatterns = detectSuspiciousActivity(
+        currentUser.uid,
+        transaction.amount,
+        transaction.type,
+        transactions
+      );
+
+      if (suspiciousPatterns.length > 0) {
+        const highSeverityPatterns = suspiciousPatterns.filter(p => p.severity === 'high');
+        if (highSeverityPatterns.length > 0) {
+          generateSecurityAuditLog(
+            currentUser.uid,
+            'suspicious_activity_detected',
+            { patterns: suspiciousPatterns, transaction }
+          );
+          toast.error('Transaction flagged for review due to suspicious activity');
+          return;
+        }
+      }
+
       const newTransaction: Transaction = {
         ...transaction,
         id: `txn_${Date.now()}`,

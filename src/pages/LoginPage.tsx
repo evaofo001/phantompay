@@ -27,15 +27,12 @@ const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [registrationStep, setRegistrationStep] = useState<'form' | 'verification'>('form');
   const [pendingEmail, setPendingEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   
   const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth } = useAuth();
   
   const loginForm = useForm<LoginForm>();
   const registerForm = useForm<RegisterForm>();
-  const verificationForm = useForm<VerificationForm>();
   const emailLinkForm = useForm<{ email: string }>();
 
   if (currentUser) {
@@ -55,27 +52,6 @@ const LoginPage: React.FC = () => {
     }
   }, []);
 
-  const generateVerificationCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
-
-  const sendVerificationEmail = async (email: string, code: string) => {
-    // Simulate sending email - in production, this would call your email service
-    console.log(`Sending verification email to ${email} with code: ${code}`);
-    
-    // Store the code temporarily (in production, store in backend)
-    localStorage.setItem(`verification_${email}`, JSON.stringify({
-      code,
-      timestamp: Date.now(),
-      expires: Date.now() + 10 * 60 * 1000 // 10 minutes
-    }));
-
-    // Simulate email sending delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast.success(`Verification code sent to ${email}! Check your inbox.`);
-  };
-
   const onLoginSubmit = async (data: LoginForm) => {
     setLoading(true);
     try {
@@ -91,89 +67,13 @@ const LoginPage: React.FC = () => {
   const onRegisterSubmit = async (data: RegisterForm) => {
     setLoading(true);
     try {
-      // Generate and send verification code
-      const code = generateVerificationCode();
-      await sendVerificationEmail(data.email, code);
-      
-      // Store registration data temporarily
-      localStorage.setItem(`pending_registration_${data.email}`, JSON.stringify({
-        email: data.email,
-        password: data.password,
-        timestamp: Date.now()
-      }));
-      
-      setPendingEmail(data.email);
-      setRegistrationStep('verification');
-      
+      await register(data.email, data.password);
+      toast.success('Account created successfully! Welcome to PhantomPay! 🎉');
     } catch (error: any) {
       toast.error(error.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
-  };
-
-  const onVerificationSubmit = async (data: VerificationForm) => {
-    setLoading(true);
-    try {
-      // Verify the code
-      const storedData = localStorage.getItem(`verification_${pendingEmail}`);
-      if (!storedData) {
-        throw new Error('Verification code expired. Please try again.');
-      }
-
-      const { code, expires } = JSON.parse(storedData);
-      
-      if (Date.now() > expires) {
-        localStorage.removeItem(`verification_${pendingEmail}`);
-        throw new Error('Verification code expired. Please try again.');
-      }
-
-      if (data.verificationCode !== code) {
-        throw new Error('Invalid verification code. Please try again.');
-      }
-
-      // Get pending registration data
-      const pendingData = localStorage.getItem(`pending_registration_${pendingEmail}`);
-      if (!pendingData) {
-        throw new Error('Registration data not found. Please start over.');
-      }
-
-      const { email, password } = JSON.parse(pendingData);
-
-      // Complete registration
-      await register(email, password);
-      
-      // Clean up temporary data
-      localStorage.removeItem(`verification_${pendingEmail}`);
-      localStorage.removeItem(`pending_registration_${pendingEmail}`);
-      
-      toast.success('Account created successfully! Welcome to PhantomPay! 🎉');
-      
-    } catch (error: any) {
-      toast.error(error.message || 'Verification failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    if (!pendingEmail) return;
-    
-    setLoading(true);
-    try {
-      const code = generateVerificationCode();
-      await sendVerificationEmail(pendingEmail, code);
-    } catch (error: any) {
-      toast.error('Failed to resend code');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBackToRegistration = () => {
-    setRegistrationStep('form');
-    setPendingEmail('');
-    setVerificationCode('');
   };
 
   const handleGoogleLogin = async () => {
@@ -449,7 +349,7 @@ const LoginPage: React.FC = () => {
           )}
 
           {/* Registration Form */}
-          {!isLogin && !isEmailLink && registrationStep === 'form' && (
+          {!isLogin && !isEmailLink && (
             <>
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 text-center">
@@ -579,92 +479,8 @@ const LoginPage: React.FC = () => {
             </>
           )}
 
-          {/* Email Verification Step */}
-          {!isLogin && !isEmailLink && registrationStep === 'verification' && (
-            <>
-              <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-green-100 p-3 rounded-full">
-                    <Mail className="h-8 w-8 text-green-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Verify Your Email
-                </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  We've sent a 6-digit verification code to
-                </p>
-                <p className="text-purple-600 font-medium text-center">
-                  {pendingEmail}
-                </p>
-              </div>
-
-              <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-6">
-                <div>
-                  <label htmlFor="verificationCode" className="block text-sm font-medium text-gray-700 mb-2">
-                    Verification Code
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <CheckCircle className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      {...verificationForm.register('verificationCode', { 
-                        required: 'Verification code is required',
-                        pattern: {
-                          value: /^\d{6}$/,
-                          message: 'Please enter a valid 6-digit code'
-                        }
-                      })}
-                      type="text"
-                      maxLength={6}
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors text-center text-lg font-mono tracking-widest"
-                      placeholder="000000"
-                    />
-                  </div>
-                  {verificationForm.formState.errors.verificationCode && (
-                    <p className="mt-1 text-sm text-red-600">{verificationForm.formState.errors.verificationCode.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Verifying...
-                    </div>
-                  ) : (
-                    'Verify & Create Account'
-                  )}
-                </button>
-              </form>
-
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={handleResendCode}
-                  disabled={loading}
-                  className="w-full text-purple-600 hover:text-purple-700 font-medium text-sm disabled:opacity-50"
-                >
-                  Didn't receive the code? Resend
-                </button>
-                
-                <button
-                  onClick={handleBackToRegistration}
-                  className="w-full flex items-center justify-center text-gray-600 hover:text-gray-700 font-medium text-sm"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Registration
-                </button>
-              </div>
-            </>
-          )}
-
           {/* Google Sign In - Only show for login or registration form */}
-          {(isLogin || registrationStep === 'form') && !isEmailLink && (
+          {!isEmailLink && (
             <>
               <div className="mt-6">
                 <div className="relative">
@@ -698,7 +514,6 @@ const LoginPage: React.FC = () => {
                   onClick={() => {
                     setIsLogin(!isLogin);
                     setIsEmailLink(false);
-                    setRegistrationStep('form');
                     setPendingEmail('');
                   }}
                   className="text-sm text-purple-600 hover:text-purple-500 font-medium"

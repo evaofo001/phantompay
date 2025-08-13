@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+import { SUPPORTED_LANGUAGES, getCurrentLanguage, setCurrentLanguage, translate } from '../utils/languageUtils';
+import { SUPPORTED_CURRENCIES } from '../utils/currencyUtils';
 import toast from 'react-hot-toast';
 
 const Settings: React.FC = () => {
@@ -39,6 +41,8 @@ const Settings: React.FC = () => {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showAddWithdrawal, setShowAddWithdrawal] = useState(false);
   const [withdrawalType, setWithdrawalType] = useState<'bank' | 'mobile' | 'card'>('mobile');
+  const [currentLanguage, setCurrentLang] = useState(getCurrentLanguage());
+  const [currentCurrency, setCurrentCurrency] = useState('KES');
   
   // Profile Data
   const [profileData, setProfileData] = useState({
@@ -47,8 +51,8 @@ const Settings: React.FC = () => {
     dateOfBirth: '1990-01-15',
     address: '123 Nairobi Street, Kenya',
     idNumber: 'ID123456789',
-    language: 'English',
-    currency: 'KES'
+    language: currentLanguage,
+    currency: currentCurrency
   });
 
   // Withdrawal Methods
@@ -227,6 +231,20 @@ const Settings: React.FC = () => {
     })));
     toast.success('Default withdrawal method updated');
   };
+
+  const handleLanguageChange = (languageCode: string) => {
+    setCurrentLanguage(languageCode);
+    setCurrentLang(languageCode);
+    setProfileData(prev => ({ ...prev, language: languageCode }));
+    toast.success('Language updated successfully');
+  };
+
+  const handleCurrencyChange = (currencyCode: string) => {
+    setCurrentCurrency(currencyCode);
+    setProfileData(prev => ({ ...prev, currency: currencyCode }));
+    toast.success('Currency updated successfully');
+  };
+
   const EditableField = ({ field, value, type = 'text', placeholder }: any) => {
     const [tempValue, setTempValue] = useState(value);
     
@@ -936,32 +954,40 @@ const Settings: React.FC = () => {
           <div className="flex justify-between items-center py-3 border-b border-gray-100">
             <div>
               <p className="font-medium text-gray-900">Language</p>
-              <p className="text-sm text-gray-600">{profileData.language}</p>
+              <p className="text-sm text-gray-600">
+                {SUPPORTED_LANGUAGES.find(l => l.code === currentLanguage)?.nativeName || 'English'}
+              </p>
             </div>
             <select
-              value={profileData.language}
-              onChange={(e) => setProfileData(prev => ({ ...prev, language: e.target.value }))}
+              value={currentLanguage}
+              onChange={(e) => handleLanguageChange(e.target.value)}
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="English">English</option>
-              <option value="Swahili">Swahili</option>
-              <option value="French">French</option>
+              {SUPPORTED_LANGUAGES.map(lang => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName}
+                </option>
+              ))}
             </select>
           </div>
 
           <div className="flex justify-between items-center py-3">
             <div>
               <p className="font-medium text-gray-900">Currency</p>
-              <p className="text-sm text-gray-600">{profileData.currency}</p>
+              <p className="text-sm text-gray-600">
+                {SUPPORTED_CURRENCIES.find(c => c.code === currentCurrency)?.name || 'Kenyan Shilling'}
+              </p>
             </div>
             <select
-              value={profileData.currency}
-              onChange={(e) => setProfileData(prev => ({ ...prev, currency: e.target.value }))}
+              value={currentCurrency}
+              onChange={(e) => handleCurrencyChange(e.target.value)}
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="KES">Kenyan Shilling (KES)</option>
-              <option value="USD">US Dollar (USD)</option>
-              <option value="EUR">Euro (EUR)</option>
+              {SUPPORTED_CURRENCIES.map(currency => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.name} ({currency.code})
+                </option>
+              ))}
             </select>
           </div>
         </div>

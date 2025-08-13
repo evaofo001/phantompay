@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "crypto-js": "^4.2.0",
     "date-fns": "^2.30.0",
     "firebase": "^10.7.1",
     "lucide-react": "^0.344.0",

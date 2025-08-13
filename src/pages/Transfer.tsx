@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Send, ArrowRight, User, DollarSign, MessageSquare, Zap, Crown } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import { useOfflineSync } from '../hooks/useOfflineSync';
+import TransactionAnimation from '../components/TransactionAnimation';
+import { checkRateLimit } from '../utils/rateLimiter';
+import { generateSecurityAuditLog } from '../utils/securityUtils';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 interface TransferForm {
@@ -14,7 +19,10 @@ interface TransferForm {
 const Transfer: React.FC = () => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<TransferForm | null>(null);
+  const [showAnimation, setShowAnimation] = useState(false);
   const { balance, sendMoney, loading, getFeeEstimate, user } = useWallet();
+  const { currentUser } = useAuth();
+  const { isOnline, addOfflineTransaction } = useOfflineSync();
   
   const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<TransferForm>({
     defaultValues: {
@@ -45,6 +53,32 @@ const Transfer: React.FC = () => {
     } else {
       try {
         if (!formData) return;
+        
+        // Rate limiting check
+        const rateLimitCheck = checkRateLimit(currentUser?.uid || 'anonymous', 'transfer');
+        if (!rateLimitCheck.allowed) {
+          toast.error(`Rate limit exceeded. Try again in ${Math.ceil((rateLimitCheck.remainingTime || 0) / 1000)} seconds.`);
+          return;
+        }
+
+        // Security audit log
+        generateSecurityAuditLog(
+          currentUser?.uid || 'anonymous',
+          'transfer_initiated',
+          { amount: formData.amount, recipient: formData.recipient, type: formData.transferType }
+        );
+
+        setShowAnimation(true);
+        
+        if (!isOnline) {
+          // Handle offline transaction
+          addOfflineTransaction('transfer', formData);
+          toast.success('Transfer queued for when you\'re back online! 📱');
+        } else {
+          await sendMoney(formData.amount, formData.recipient, formData.description);
+          toast.success('Transfer completed successfully! 🎉');
+        }
+        
         await sendMoney(formData.amount, formData.recipient, formData.description);
         toast.success('Transfer completed successfully! 🎉');
         reset();
@@ -54,6 +88,12 @@ const Transfer: React.FC = () => {
         toast.error(error.message || 'Transfer failed');
       }
     }
+  };
+
+  const handleAnimationComplete = () => {
+    setShowAnimation(false);
+    setStep(1);
+    setFormData(null);
   };
 
   const goBack = () => {
@@ -185,6 +225,22 @@ const Transfer: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto">
+      <TransactionAnimation
+        isVisible={showAnimation}
+        type="send"
+        amount={formData?.amount || 0}
+        onComplete={handleAnimationComplete}
+      />
+      
+      {/* Offline indicator */}
+      {!isOnline && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-800">
+            📱 You're offline. Transactions will be processed when connection is restored.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center mb-8">
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">

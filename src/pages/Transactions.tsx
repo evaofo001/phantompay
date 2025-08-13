@@ -10,10 +10,12 @@ import {
   Calendar
 } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import RepeatTransactionButton from '../components/RepeatTransactionButton';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
 
 const Transactions: React.FC = () => {
-  const { transactions } = useWallet();
+  const { transactions, sendMoney } = useWallet();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -76,6 +78,18 @@ const Transactions: React.FC = () => {
 
   const getTransactionSign = (type: string) => {
     return type === 'receive' || type === 'reward' ? '+' : '-';
+  };
+
+  const handleRepeatTransaction = async (transaction: any) => {
+    try {
+      if (transaction.type === 'send') {
+        await sendMoney(transaction.amount, transaction.recipient || '', `Repeat: ${transaction.description}`);
+        toast.success('Transaction repeated successfully! 🔄');
+      }
+      // Add other transaction types as needed
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to repeat transaction');
+    }
   };
 
   return (
@@ -172,6 +186,12 @@ const Transactions: React.FC = () => {
                         {transaction.sender && (
                           <p>From: {transaction.sender}</p>
                         )}
+                      </div>
+                      <div className="mt-2">
+                        <RepeatTransactionButton
+                          transaction={transaction}
+                          onRepeat={handleRepeatTransaction}
+                        />
                       </div>
                     </div>
                   </div>
