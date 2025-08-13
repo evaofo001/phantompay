@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LucideIcon } from 'lucide-react';
+import { DivideIcon as LucideIcon } from 'lucide-react';
 
 interface AnimatedButtonProps {
   onClick: () => void;
