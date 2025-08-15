@@ -12,6 +12,7 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import Transfer from './pages/Transfer';
+import Deposit from './pages/Deposit';
 import Transactions from './pages/Transactions';
 import Rewards from './pages/Rewards';
 import Settings from './pages/Settings';
@@ -57,6 +58,13 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <Transfer />
+                      </Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/deposit" element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <Deposit />
                       </Layout>
                     </ProtectedRoute>
                   } />

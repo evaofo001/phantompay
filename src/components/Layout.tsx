@@ -33,6 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
     { name: 'Transfer', href: '/transfer', icon: Send },
+    { name: 'Deposit', href: '/deposit', icon: Plus },
     { name: 'Withdraw', href: '/withdraw', icon: Minus },
     { name: 'Loans', href: '/loans', icon: Target },
     { name: 'Savings', href: '/savings', icon: PiggyBank },
