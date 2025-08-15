@@ -5,6 +5,20 @@ import { User, Transaction, SavingsAccount } from '../types';
 import { detectSuspiciousActivity, generateSecurityAuditLog } from '../utils/securityUtils';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { calculateFee, getFeeBreakdown } from '../utils/feeCalculator';
+import { 
+  getUserDocument, 
+  createUserDocument, 
+  updateUserDocument, 
+  updateUserBalance as firestoreUpdateUserBalance,
+  addTransaction as firestoreAddTransaction,
+  getUserTransactions,
+  addSavingsAccount,
+  updateSavingsAccount,
+  getUserSavingsAccounts,
+  migrateUserDataFromLocalStorage
+} from '../utils/firestoreHelpers';
+import { onSnapshot, doc, updateDoc, increment } from '../config/firebase';
+import { db } from '../config/firebase';
 import toast from 'react-hot-toast';
 
 interface WalletContextType {
@@ -73,57 +87,55 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       setLoading(true);
       
-      // Load user data from localStorage
-      const userData = localStorage.getItem(`user_${currentUser.uid}`);
-      if (userData) {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
-        setBalance(parsedUser.walletBalance || 0);
-        setSavingsBalance(parsedUser.savingsBalance || 0);
-        setRewardPoints(parsedUser.rewardPoints || 0);
-      } else {
-        // Create new user
-        const newUser: User = {
-          uid: currentUser.uid,
-          email: currentUser.email || '',
-          displayName: currentUser.displayName || '',
-          walletBalance: 0,
-          savingsBalance: 0,
-          rewardPoints: 0,
-          totalEarnedInterest: 0,
-          premiumStatus: false,
-          referralsCount: 0,
-          referralEarnings: 0,
-          kycVerified: false,
-          createdAt: new Date()
-        };
-        setUser(newUser);
-        setBalance(0);
-        setSavingsBalance(0);
-        setRewardPoints(0);
-        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(newUser));
-      }
+      // Try to migrate data from localStorage first
+      await migrateUserDataFromLocalStorage(currentUser.uid);
+      
+      // Set up real-time listener for user document
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const unsubscribeUser = onSnapshot(userDocRef, async (doc) => {
+        if (doc.exists()) {
+          const userData = { uid: currentUser.uid, ...doc.data() } as User;
+          setUser(userData);
+          setBalance(userData.walletBalance || 0);
+          setSavingsBalance(userData.savingsBalance || 0);
+          setRewardPoints(userData.rewardPoints || 0);
+        } else {
+          // Create new user document
+          const newUser: User = {
+            uid: currentUser.uid,
+            email: currentUser.email || '',
+            displayName: currentUser.displayName || '',
+            walletBalance: 0,
+            savingsBalance: 0,
+            rewardPoints: 0,
+            totalEarnedInterest: 0,
+            premiumStatus: false,
+            referralsCount: 0,
+            referralEarnings: 0,
+            kycVerified: false,
+            createdAt: new Date()
+          };
+          
+          await createUserDocument(currentUser.uid, newUser);
+        }
+      });
 
-      // Load transactions
-      const transactionsData = localStorage.getItem(`transactions_${currentUser.uid}`);
-      if (transactionsData) {
-        const parsedTransactions = JSON.parse(transactionsData).map((t: any) => ({
-          ...t,
-          timestamp: new Date(t.timestamp)
-        }));
-        setTransactions(parsedTransactions);
-      }
+      // Set up real-time listener for transactions
+      const unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
+        setTransactions(transactionsList);
+      });
 
-      // Load savings accounts
-      const savingsData = localStorage.getItem(`savings_${currentUser.uid}`);
-      if (savingsData) {
-        const parsedSavings = JSON.parse(savingsData).map((s: any) => ({
-          ...s,
-          startDate: new Date(s.startDate),
-          maturityDate: new Date(s.maturityDate)
-        }));
-        setSavingsAccounts(parsedSavings);
-      }
+      // Set up real-time listener for savings accounts
+      const unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
+        setSavingsAccounts(savingsList);
+      });
+
+      // Cleanup function
+      return () => {
+        unsubscribeUser();
+        unsubscribeTransactions();
+        unsubscribeSavings();
+      };
 
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -137,10 +149,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser || !user) return;
 
     try {
-      const updatedUser = { ...user, walletBalance: newBalance };
-      setUser(updatedUser);
-      setBalance(newBalance);
-      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+      await updateUserDocument(currentUser.uid, { walletBalance: newBalance });
     } catch (error) {
       console.error('Error updating balance:', error);
       toast.error('Failed to update balance');
@@ -151,9 +160,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser || !user) return;
 
     try {
-      const updatedUser = { ...user, ...premiumData };
-      setUser(updatedUser);
-      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+      await updateUserDocument(currentUser.uid, premiumData);
     } catch (error) {
       console.error('Error updating premium status:', error);
       toast.error('Failed to update premium status');
@@ -185,15 +192,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      const newTransaction: Transaction = {
-        ...transaction,
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: new Date()
-      };
-
-      const updatedTransactions = [newTransaction, ...transactions];
-      setTransactions(updatedTransactions);
-      localStorage.setItem(`transactions_${currentUser.uid}`, JSON.stringify(updatedTransactions));
+      await firestoreAddTransaction(transaction);
     } catch (error) {
       console.error('Error adding transaction:', error);
       toast.error('Failed to add transaction');
@@ -204,18 +203,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser || !user) return;
 
     try {
-      const newRewardPoints = rewardPoints + points;
-      setRewardPoints(newRewardPoints);
-      
-      const updatedUser = { ...user, rewardPoints: newRewardPoints };
-      setUser(updatedUser);
-      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+      // Update user document with new reward points
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        rewardPoints: increment(points)
+      });
 
       if (points > 0) {
         await addTransaction({
           uid: currentUser.uid,
           type: 'reward',
-          amount: Math.abs(points * 0.1), // Convert points to currency value
+          amount: Math.abs(points * 0.1),
           description: `Reward points earned: ${points} points`,
           status: 'completed',
           direction: '+'
@@ -252,9 +249,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Update balance
-      const newBalance = balance - totalDeduction;
-      await updateUserBalance(newBalance);
+      // Update balance atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(-totalDeduction)
+      });
 
       // Add transaction
       await addTransaction({
@@ -309,9 +307,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Update balance
-      const newBalance = balance - totalDeduction;
-      await updateUserBalance(newBalance);
+      // Update balance atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(-totalDeduction)
+      });
 
       // Add transaction
       await addTransaction({
@@ -353,9 +352,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Update balance (no fees for deposits)
-      const newBalance = balance + amount;
-      await updateUserBalance(newBalance);
+      // Update balance atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(amount)
+      });
 
       // Add transaction
       await addTransaction({
@@ -388,9 +388,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Update balance (no fees for airtime)
-      const newBalance = balance - amount;
-      await updateUserBalance(newBalance);
+      // Update balance atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(-amount)
+      });
 
       // Add transaction
       await addTransaction({
@@ -404,7 +405,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       // Add reward points
-      const pointsEarned = Math.floor(amount / 200); // 1 point per 200 KES
+      const pointsEarned = Math.floor(amount / 200);
       if (pointsEarned > 0) {
         await addRewardPoints(pointsEarned);
       }
@@ -429,9 +430,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Update balance (no fees for data)
-      const newBalance = balance - amount;
-      await updateUserBalance(newBalance);
+      // Update balance atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(-amount)
+      });
 
       // Add transaction
       await addTransaction({
@@ -445,7 +447,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       // Add reward points
-      const pointsEarned = Math.floor(amount / 200); // 1 point per 200 KES
+      const pointsEarned = Math.floor(amount / 200);
       if (pointsEarned > 0) {
         await addRewardPoints(pointsEarned);
       }
@@ -475,8 +477,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const maturityDate = new Date(startDate);
       maturityDate.setMonth(maturityDate.getMonth() + lockPeriod);
 
-      const newSavingsAccount: SavingsAccount = {
-        id: `sav_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newSavingsAccount: Omit<SavingsAccount, 'id'> = {
         uid: currentUser.uid,
         principal,
         lockPeriod,
@@ -486,23 +487,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         status: 'active'
       };
 
-      const updatedSavings = [...savingsAccounts, newSavingsAccount];
-      setSavingsAccounts(updatedSavings);
-      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
+      await addSavingsAccount(newSavingsAccount);
 
-      // Update balances
-      const newWalletBalance = balance - principal;
-      const newSavingsBalance = savingsBalance + principal;
-      
-      await updateUserBalance(newWalletBalance);
-      setSavingsBalance(newSavingsBalance);
-
-      // Update user data
-      if (user) {
-        const updatedUser = { ...user, savingsBalance: newSavingsBalance };
-        setUser(updatedUser);
-        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
-      }
+      // Update balances atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(-principal),
+        savingsBalance: increment(principal)
+      });
 
       // Add transaction
       await addTransaction({
@@ -539,7 +530,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let penalty = 0;
 
       if (isEarly) {
-        penalty = Math.round(savingsAccount.principal * 0.05); // 5% penalty
+        penalty = Math.round(savingsAccount.principal * 0.05);
         withdrawalAmount = savingsAccount.principal - penalty;
       } else {
         // Calculate earned interest for matured account
@@ -548,26 +539,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         withdrawalAmount = Math.round(maturityValue);
       }
 
-      // Update savings accounts
-      const updatedSavings = savingsAccounts.map(s => 
-        s.id === savingsId ? { ...s, status: 'withdrawn' as const } : s
-      );
-      setSavingsAccounts(updatedSavings);
-      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
+      // Update savings account status
+      await updateSavingsAccount(savingsId, { status: 'withdrawn' });
 
-      // Update balances
-      const newWalletBalance = balance + withdrawalAmount;
-      const newSavingsBalance = savingsBalance - savingsAccount.principal;
-      
-      await updateUserBalance(newWalletBalance);
-      setSavingsBalance(newSavingsBalance);
-
-      // Update user data
-      if (user) {
-        const updatedUser = { ...user, savingsBalance: newSavingsBalance };
-        setUser(updatedUser);
-        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
-      }
+      // Update balances atomically
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        walletBalance: increment(withdrawalAmount),
+        savingsBalance: increment(-savingsAccount.principal)
+      });
 
       // Add transaction
       await addTransaction({

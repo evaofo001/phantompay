@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { useAdmin } from './AdminContext';
 import { Loan, SavingsAccount } from '../types';
+import { addLoan, updateLoan, getUserLoans } from '../utils/firestoreHelpers';
 import toast from 'react-hot-toast';
 
 interface LoanContextType {
@@ -24,18 +25,10 @@ export const useLoan = () => {
   return context;
 };
 
-// CORRECTED: Loan interest rates MUST BE HIGHER than savings interest rates
 const LOAN_INTEREST_RATES = {
-  basic: 0.20,    // 20% annual (higher than 6% savings)
-  plus: 0.18,     // 18% annual (higher than 12% savings)  
-  vip: 0.15       // 15% annual (higher than 18% savings - still profitable)
-};
-
-// Savings interest rates (for reference)
-const SAVINGS_INTEREST_RATES = {
-  basic: 0.06,    // 6% annual
-  plus: 0.12,     // 12% annual
-  vip: 0.18       // 18% annual
+  basic: 0.20,
+  plus: 0.18,
+  vip: 0.15
 };
 
 export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -44,26 +37,20 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Load user's loans
+  // Load user's loans with real-time updates
   useEffect(() => {
     if (!currentUser) {
       setLoans([]);
       return;
     }
 
-    const savedLoans = localStorage.getItem(`loans_${currentUser.uid}`);
-    if (savedLoans) {
-      const loansList = JSON.parse(savedLoans).map((loan: any) => ({
-        ...loan,
-        disbursementDate: new Date(loan.disbursementDate),
-        dueDate: new Date(loan.dueDate),
-        createdAt: new Date(loan.createdAt)
-      }));
+    const unsubscribe = getUserLoans(currentUser.uid, (loansList) => {
       setLoans(loansList);
-    }
+    });
+
+    return unsubscribe;
   }, [currentUser]);
 
-  // CORRECTED: Calculate max loan amount from ALL savings accounts combined
   const calculateMaxLoanAmount = (savingsAccounts: SavingsAccount[]): number => {
     const activeSavings = savingsAccounts.filter(savings => savings.status === 'active');
     
@@ -72,7 +59,6 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let totalSavingsPrincipal = 0;
     let totalProjectedInterest = 0;
     
-    // Calculate combined value from ALL savings accounts
     activeSavings.forEach(savings => {
       const monthsElapsed = Math.min(
         (Date.now() - savings.startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44),
@@ -87,15 +73,9 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalProjectedInterest += projectedInterest;
     });
     
-    // CORRECTED FORMULA: Loan limit + interest = all savings principals + all savings interests - 1
     const totalSavingsValue = totalSavingsPrincipal + totalProjectedInterest;
     const maxLoanPlusInterest = totalSavingsValue - 1;
     
-    // We need to solve: loan_amount + (loan_amount * interest_rate * months/12) = maxLoanPlusInterest
-    // Simplified for 6 months: loan_amount * (1 + interest_rate * 0.5) = maxLoanPlusInterest
-    // Therefore: loan_amount = maxLoanPlusInterest / (1 + interest_rate * 0.5)
-    
-    // Use basic tier rate as default for calculation
     const defaultInterestRate = LOAN_INTEREST_RATES.basic;
     const maxLoanAmount = maxLoanPlusInterest / (1 + defaultInterestRate * 0.5);
     
@@ -105,13 +85,12 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const calculateLoanInterest = (amount: number, premiumTier: string) => {
     const rate = LOAN_INTEREST_RATES[premiumTier as keyof typeof LOAN_INTEREST_RATES] || LOAN_INTEREST_RATES.basic;
     
-    // Calculate interest for 6 months (standard loan period)
     const months = 6;
     const totalInterest = amount * rate * (months / 12);
     const totalRepayment = amount + totalInterest;
     
     return {
-      rate: rate * 100, // Convert to percentage
+      rate: rate * 100,
       totalInterest: Math.round(totalInterest),
       totalRepayment: Math.round(totalRepayment)
     };
@@ -120,7 +99,6 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getLoanEligibility = (savingsAccounts: SavingsAccount[]) => {
     const activeSavings = savingsAccounts.filter(savings => savings.status === 'active');
     
-    // Rule 1: Must have at least one active savings account
     if (activeSavings.length === 0) {
       return {
         eligible: false,
@@ -129,7 +107,6 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Rule 2: Check if user already has any active loan
     const existingLoan = loans.find(loan => 
       loan.status === 'active' || loan.status === 'overdue'
     );
@@ -142,10 +119,9 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Rule 3: Calculate max loan amount from ALL savings combined
     const maxAmount = calculateMaxLoanAmount(activeSavings);
     
-    if (maxAmount < 1000) { // Minimum loan amount
+    if (maxAmount < 1000) {
       return {
         eligible: false,
         reason: 'Combined savings amount too low for loan eligibility (minimum loan: KES 1,000)',
@@ -169,17 +145,16 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const loanCalculation = calculateLoanInterest(amount, premiumTier);
       
-      // Create loan record (not tied to specific savings account anymore)
-      const newLoan: Loan = {
-        id: `loan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Create loan record
+      const newLoan: Omit<Loan, 'id'> = {
         uid: currentUser.uid,
-        savingsAccountId: 'combined_savings', // Indicates it's backed by all savings
+        savingsAccountId: 'combined_savings',
         amount,
         interestRate: loanCalculation.rate,
         totalInterest: loanCalculation.totalInterest,
         totalRepayment: loanCalculation.totalRepayment,
         disbursementDate: new Date(),
-        dueDate: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000), // 6 months from now
+        dueDate: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000),
         status: 'active',
         repaidAmount: 0,
         remainingAmount: loanCalculation.totalRepayment,
@@ -187,19 +162,15 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date()
       };
 
-      const updatedLoans = [newLoan, ...loans];
-      setLoans(updatedLoans);
-      
-      // Save to localStorage
-      localStorage.setItem(`loans_${currentUser.uid}`, JSON.stringify(updatedLoans));
+      await addLoan(newLoan);
 
       // Collect loan interest as revenue for admin
       await collectRevenue(
         loanCalculation.totalInterest,
         'loan_interest',
-        newLoan.id,
+        `loan_${Date.now()}`,
         currentUser.uid,
-        `Loan interest revenue from loan ${newLoan.id} (${loanCalculation.rate}% rate)`
+        `Loan interest revenue from loan (${loanCalculation.rate}% rate)`
       );
 
       toast.success(`Loan of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} approved! 🎉`);
@@ -219,23 +190,17 @@ export const LoanProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      const updatedLoans = loans.map(loan => {
-        if (loan.id === loanId) {
-          const newRepaidAmount = loan.repaidAmount + amount;
-          const newRemainingAmount = Math.max(0, loan.totalRepayment - newRepaidAmount);
-          
-          return {
-            ...loan,
-            repaidAmount: newRepaidAmount,
-            remainingAmount: newRemainingAmount,
-            status: newRemainingAmount === 0 ? 'repaid' as const : loan.status
-          };
-        }
-        return loan;
-      });
+      const loan = loans.find(l => l.id === loanId);
+      if (!loan) throw new Error('Loan not found');
 
-      setLoans(updatedLoans);
-      localStorage.setItem(`loans_${currentUser.uid}`, JSON.stringify(updatedLoans));
+      const newRepaidAmount = loan.repaidAmount + amount;
+      const newRemainingAmount = Math.max(0, loan.totalRepayment - newRepaidAmount);
+      
+      await updateLoan(loanId, {
+        repaidAmount: newRepaidAmount,
+        remainingAmount: newRemainingAmount,
+        status: newRemainingAmount === 0 ? 'repaid' : loan.status
+      });
 
       toast.success(`Loan repayment of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} processed! 💰`);
 

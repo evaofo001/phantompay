@@ -1,6 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { AdminUser, RevenueRecord, AdminWallet, PlatformStats } from '../types/admin';
+import { 
+  getAdminWallet,
+  updateAdminWallet,
+  addRevenueRecord,
+  getRevenueRecords,
+  migrateAdminDataFromLocalStorage
+} from '../utils/firestoreHelpers';
+import { doc, setDoc, onSnapshot } from '../config/firebase';
+import { db } from '../config/firebase';
 import toast from 'react-hot-toast';
 
 interface AdminContextType {
@@ -26,14 +35,14 @@ export const useAdmin = () => {
   return context;
 };
 
-// Admin email addresses - in production, this would be in a secure database
+// Admin email addresses
 const ADMIN_EMAILS = [
   'admin@phantompay.com',
   'superadmin@phantompay.com',
   'revenue@phantompay.com'
 ];
 
-// Secret code for admin operations - in production, this would be more secure
+// Secret code for admin operations
 const ADMIN_SECRET_CODE = 'PHANTOM2024';
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -63,10 +72,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsAdmin(userIsAdmin);
 
         if (userIsAdmin) {
+          // Try to migrate admin data from localStorage first
+          await migrateAdminDataFromLocalStorage();
+          
           await initializeAdminUser();
-          await initializeAdminWallet();
-          await loadPlatformStats();
-          await loadRevenueRecords();
+          await setupAdminListeners();
         }
       } catch (error) {
         console.error('Error checking admin status:', error);
@@ -80,7 +90,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!currentUser) return;
 
     try {
-      // Mock admin user data
       const newAdmin: AdminUser = {
         uid: currentUser.uid,
         email: currentUser.email || '',
@@ -95,84 +104,78 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const initializeAdminWallet = async () => {
-    if (!currentUser) return;
-
+  const setupAdminListeners = async () => {
     try {
-      // Mock admin wallet data - in production this would come from database
-      const savedWallet = localStorage.getItem('admin_wallet');
-      let walletData: AdminWallet;
+      // Set up admin wallet listener
+      const adminWalletRef = doc(db, 'admin_wallet', 'main');
+      const unsubscribeWallet = onSnapshot(adminWalletRef, async (doc) => {
+        if (doc.exists()) {
+          const walletData = doc.data() as AdminWallet;
+          setAdminWallet(walletData);
+        } else {
+          // Create initial admin wallet
+          const initialWallet: AdminWallet = {
+            uid: 'admin_wallet',
+            balance: 0,
+            totalRevenue: 0,
+            totalExpenses: 0,
+            monthlyExpenses: 0,
+            dailyExpenses: 0,
+            monthlyRevenue: 0,
+            dailyRevenue: 0,
+            lastUpdated: new Date()
+          };
+          
+          await setDoc(adminWalletRef, initialWallet);
+        }
+      });
 
-      if (savedWallet) {
-        walletData = JSON.parse(savedWallet);
-      } else {
-        walletData = {
-          uid: 'admin_wallet',
-          balance: 0, // Fresh start - no balance
-          totalRevenue: 0,
-          totalExpenses: 0,
-          monthlyExpenses: 0,
-          dailyExpenses: 0,
-          monthlyRevenue: 0,
-          dailyRevenue: 0,
-          lastUpdated: new Date()
-        };
-        localStorage.setItem('admin_wallet', JSON.stringify(walletData));
-      }
+      // Set up revenue records listener
+      const unsubscribeRevenue = getRevenueRecords((records) => {
+        setRevenueRecords(records);
+      });
 
-      setAdminWallet(walletData);
-    } catch (error) {
-      console.error('Error initializing admin wallet:', error);
-    }
-  };
+      // Set up platform stats listener
+      const platformStatsRef = doc(db, 'platform_stats', 'summary');
+      const unsubscribeStats = onSnapshot(platformStatsRef, async (doc) => {
+        if (doc.exists()) {
+          const statsData = doc.data() as PlatformStats;
+          setPlatformStats(statsData);
+        } else {
+          // Create initial platform stats
+          const initialStats: PlatformStats = {
+            totalUsers: 0,
+            activeUsers: 0,
+            premiumUsers: 0,
+            totalTransactions: 0,
+            totalVolume: 0,
+            averageTransactionSize: 0,
+            totalSavings: 0,
+            totalLoansIssued: 0,
+            totalLoanValue: 0,
+            overdueLoans: 0,
+            totalExpenses: 0,
+            aiAssistantUsage: 0,
+            conversionRate: 0
+          };
+          
+          await setDoc(platformStatsRef, initialStats);
+        }
+      });
 
-  const loadPlatformStats = async () => {
-    try {
-      // Mock platform stats
-      const mockStats: PlatformStats = {
-        totalUsers: 0,
-        activeUsers: 0,
-        premiumUsers: 0,
-        totalTransactions: 0,
-        totalVolume: 0,
-        averageTransactionSize: 0,
-        totalSavings: 0,
-        totalLoansIssued: 0,
-        totalLoanValue: 0,
-        overdueLoans: 0,
-        totalExpenses: 0,
-
-        aiAssistantUsage: 0,
-        conversionRate: 0
+      // Return cleanup function
+      return () => {
+        unsubscribeWallet();
+        unsubscribeRevenue();
+        unsubscribeStats();
       };
 
-      setPlatformStats(mockStats);
     } catch (error) {
-      console.error('Error loading platform stats:', error);
+      console.error('Error setting up admin listeners:', error);
     }
   };
 
-  const loadRevenueRecords = async () => {
-    try {
-
-      // Load revenue records from localStorage
-      const savedRecords = localStorage.getItem('admin_revenue_records');
-      if (savedRecords) {
-        const records = JSON.parse(savedRecords).map((r: any) => ({
-          ...r,
-          timestamp: new Date(r.timestamp)
-        }));
-        setRevenueRecords(records);
-      } else {
-        setRevenueRecords([]);
-      }
-    } catch (error) {
-      console.error('Error loading revenue records:', error);
-    }
-  };
-
-  // This function now handles both revenue (positive amount) and expenses (negative amount)
-  const collectRevenue = async ( // Renamed from collectRevenue to processAdminFinancialEvent for clarity
+  const collectRevenue = async (
     amount: number,
     type: string, 
     sourceTransactionId: string, 
@@ -183,39 +186,28 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     try {
       // Add revenue record
-      const newRecord: RevenueRecord = {
-        id: `rev_${Date.now()}`,
-        type: type as any, // Cast to any because type can be revenue or expense
+      const newRecord = {
+        type: type as any,
         amount,
         sourceTransactionId,
         sourceUserId,
-        timestamp: new Date(),
         description,
-        status: 'collected', // Assuming all collected/deducted are 'collected'
-        category: amount > 0 ? 'revenue' : 'expense' // Categorize based on amount
+        status: 'collected',
+        category: amount > 0 ? 'revenue' : 'expense'
       };
 
-      setRevenueRecords(prev => [newRecord, ...prev]);
-      
-      // Save to localStorage
-      const updatedRecords = [newRecord, ...revenueRecords];
-      localStorage.setItem('admin_revenue_records', JSON.stringify(updatedRecords));
+      await addRevenueRecord(newRecord);
 
       // Update admin wallet
-      const updatedWallet = {
-        ...adminWallet,
+      await updateAdminWallet({
         balance: adminWallet.balance + amount,
         totalRevenue: amount > 0 ? adminWallet.totalRevenue + amount : adminWallet.totalRevenue,
         totalExpenses: amount < 0 ? adminWallet.totalExpenses + Math.abs(amount) : adminWallet.totalExpenses,
         monthlyRevenue: amount > 0 ? adminWallet.monthlyRevenue + amount : adminWallet.monthlyRevenue,
         monthlyExpenses: amount < 0 ? adminWallet.monthlyExpenses + Math.abs(amount) : adminWallet.monthlyExpenses,
         dailyRevenue: amount > 0 ? adminWallet.dailyRevenue + amount : adminWallet.dailyRevenue,
-        dailyExpenses: amount < 0 ? adminWallet.dailyExpenses + Math.abs(amount) : adminWallet.dailyExpenses,
-        lastUpdated: new Date()
-      };
-
-      setAdminWallet(updatedWallet);
-      localStorage.setItem('admin_wallet', JSON.stringify(updatedWallet));
+        dailyExpenses: amount < 0 ? adminWallet.dailyExpenses + Math.abs(amount) : adminWallet.dailyExpenses
+      });
 
     } catch (error) {
       console.error('Error collecting revenue:', error);
@@ -229,13 +221,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    // Validate secret code
     if (secretCode !== ADMIN_SECRET_CODE) {
       toast.error('Invalid admin secret code');
       return;
     }
 
-    // Validate amount
     if (amount <= 0 || amount > adminWallet.balance) {
       toast.error('Invalid withdrawal amount');
       return;
@@ -244,11 +234,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       setLoading(true);
 
-      // Add withdrawal record
-      // Use the collectRevenue function which now handles both revenue and expenses
       await collectRevenue(
-        -amount, // Pass negative amount for expense
-        'admin_withdrawal', // New type for admin-initiated withdrawals
+        -amount,
+        'admin_withdrawal',
         `admin_withdrawal_${Date.now()}`,
         currentUser?.uid || 'admin',
         `Admin withdrawal of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })}`
@@ -270,13 +258,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    // Validate secret code
     if (secretCode !== ADMIN_SECRET_CODE) {
       toast.error('Invalid admin secret code');
       return;
     }
 
-    // Validate amount
     if (amount <= 0 || amount > adminWallet.balance) {
       toast.error('Invalid transfer amount');
       return;
@@ -290,11 +276,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       setLoading(true);
 
-      // Add transfer record
-      // Use the collectRevenue function which now handles both revenue and expenses
       await collectRevenue(
-        -amount, // Pass negative amount for expense
-        'admin_transfer', // New type for admin-initiated transfers
+        -amount,
+        'admin_transfer',
         `admin_transfer_${Date.now()}`,
         currentUser?.uid || 'admin',
         `Admin transfer of ${amount.toLocaleString('en-KE', { style: 'currency', currency: 'KES' })} to ${recipient}`
@@ -315,11 +299,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setLoading(true);
     try {
-      await Promise.all([
-        initializeAdminWallet(),
-        loadPlatformStats(),
-        loadRevenueRecords()
-      ]);
+      await setupAdminListeners();
       toast.success('Admin data refreshed successfully');
     } catch (error) {
       console.error('Error refreshing admin data:', error);
