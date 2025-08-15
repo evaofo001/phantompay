@@ -1,19 +1,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { useAdmin } from './AdminContext';
 import { User, Transaction, SavingsAccount } from '../types';
 import { detectSuspiciousActivity, generateSecurityAuditLog } from '../utils/securityUtils';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { calculateFee, getFeeBreakdown } from '../utils/feeCalculator';
 import toast from 'react-hot-toast';
 
 interface WalletContextType {
   user: User | null;
   balance: number;
+  savingsBalance: number;
+  rewardPoints: number;
   transactions: Transaction[];
   savingsAccounts: SavingsAccount[];
+  sendMoney: (amount: number, recipient: string, description: string) => Promise<void>;
+  withdrawMoney: (amount: number, method: string) => Promise<void>;
+  depositMoney: (amount: number, method: string) => Promise<void>;
+  buyAirtime: (amount: number, phoneNumber: string) => Promise<void>;
+  buyData: (amount: number, phoneNumber: string, bundle: string) => Promise<void>;
+  createSavingsAccount: (principal: number, lockPeriod: number, annualInterestRate: number) => Promise<void>;
+  withdrawFromSavings: (savingsId: string, isEarly: boolean) => Promise<void>;
   updateUserBalance: (newBalance: number) => Promise<void>;
+  updateUserPremiumStatus: (premiumData: any) => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'timestamp'>) => Promise<void>;
-  createSavingsAccount: (account: Omit<SavingsAccount, 'id' | 'createdAt' | 'status'>) => Promise<void>;
-  updateSavingsAccount: (id: string, updates: Partial<SavingsAccount>) => Promise<void>;
+  addRewardPoints: (points: number) => Promise<void>;
+  getFeeEstimate: (amount: number, type: string) => any;
   loading: boolean;
 }
 
@@ -29,8 +41,11 @@ export const useWallet = () => {
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
+  const { collectRevenue } = useAdmin();
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState(0);
+  const [savingsBalance, setSavingsBalance] = useState(0);
+  const [rewardPoints, setRewardPoints] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [savingsAccounts, setSavingsAccounts] = useState<SavingsAccount[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,12 +54,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (currentUser) {
       loadUserData();
     } else {
-      setUser(null);
-      setBalance(0);
-      setTransactions([]);
-      setSavingsAccounts([]);
+      resetUserData();
     }
   }, [currentUser]);
+
+  const resetUserData = () => {
+    setUser(null);
+    setBalance(0);
+    setSavingsBalance(0);
+    setRewardPoints(0);
+    setTransactions([]);
+    setSavingsAccounts([]);
+  };
 
   const loadUserData = async () => {
     if (!currentUser) return;
@@ -57,19 +78,29 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (userData) {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
-        setBalance(parsedUser.balance || 0);
+        setBalance(parsedUser.walletBalance || 0);
+        setSavingsBalance(parsedUser.savingsBalance || 0);
+        setRewardPoints(parsedUser.rewardPoints || 0);
       } else {
         // Create new user
         const newUser: User = {
           uid: currentUser.uid,
           email: currentUser.email || '',
           displayName: currentUser.displayName || '',
-          balance: 0,
-          createdAt: new Date(),
-          premiumStatus: false
+          walletBalance: 0,
+          savingsBalance: 0,
+          rewardPoints: 0,
+          totalEarnedInterest: 0,
+          premiumStatus: false,
+          referralsCount: 0,
+          referralEarnings: 0,
+          kycVerified: false,
+          createdAt: new Date()
         };
         setUser(newUser);
         setBalance(0);
+        setSavingsBalance(0);
+        setRewardPoints(0);
         localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(newUser));
       }
 
@@ -88,7 +119,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (savingsData) {
         const parsedSavings = JSON.parse(savingsData).map((s: any) => ({
           ...s,
-          createdAt: new Date(s.createdAt),
+          startDate: new Date(s.startDate),
           maturityDate: new Date(s.maturityDate)
         }));
         setSavingsAccounts(parsedSavings);
@@ -106,13 +137,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser || !user) return;
 
     try {
-      const updatedUser = { ...user, balance: newBalance };
+      const updatedUser = { ...user, walletBalance: newBalance };
       setUser(updatedUser);
       setBalance(newBalance);
       localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
     } catch (error) {
       console.error('Error updating balance:', error);
       toast.error('Failed to update balance');
+    }
+  };
+
+  const updateUserPremiumStatus = async (premiumData: any) => {
+    if (!currentUser || !user) return;
+
+    try {
+      const updatedUser = { ...user, ...premiumData };
+      setUser(updatedUser);
+      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Error updating premium status:', error);
+      toast.error('Failed to update premium status');
     }
   };
 
@@ -143,7 +187,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       const newTransaction: Transaction = {
         ...transaction,
-        id: `txn_${Date.now()}`,
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date()
       };
 
@@ -156,6 +200,151 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const addRewardPoints = async (points: number) => {
+    if (!currentUser || !user) return;
+
+    try {
+      const newRewardPoints = rewardPoints + points;
+      setRewardPoints(newRewardPoints);
+      
+      const updatedUser = { ...user, rewardPoints: newRewardPoints };
+      setUser(updatedUser);
+      localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+
+      if (points > 0) {
+        await addTransaction({
+          uid: currentUser.uid,
+          type: 'reward',
+          amount: Math.abs(points * 0.1), // Convert points to currency value
+          description: `Reward points earned: ${points} points`,
+          status: 'completed',
+          direction: '+'
+        });
+      }
+    } catch (error) {
+      console.error('Error adding reward points:', error);
+    }
+  };
+
+  const getFeeEstimate = (amount: number, type: string) => {
+    const premiumTier = user?.premiumStatus ? (user as any).premiumPlan || 'plus' : 'basic';
+    return getFeeBreakdown(amount, type, premiumTier);
+  };
+
+  const sendMoney = async (amount: number, recipient: string, description: string) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    // Rate limiting check
+    const rateLimitCheck = checkRateLimit(currentUser.uid, 'transfer');
+    if (!rateLimitCheck.allowed) {
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil((rateLimitCheck.remainingTime || 0) / 1000)} seconds.`);
+    }
+
+    setLoading(true);
+    try {
+      const feeEstimate = getFeeEstimate(amount, 'p2p');
+      const totalDeduction = amount + feeEstimate.totalFee;
+
+      if (totalDeduction > balance) {
+        throw new Error('Insufficient balance including fees');
+      }
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Update balance
+      const newBalance = balance - totalDeduction;
+      await updateUserBalance(newBalance);
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'send',
+        amount,
+        fee: feeEstimate.totalFee,
+        netAmount: amount,
+        description,
+        status: 'completed',
+        direction: '-',
+        recipient
+      });
+
+      // Collect fee as revenue
+      if (feeEstimate.totalFee > 0) {
+        await collectRevenue(
+          feeEstimate.totalFee,
+          'transaction_fee',
+          `txn_${Date.now()}`,
+          currentUser.uid,
+          `P2P transfer fee from ${currentUser.email}`
+        );
+      }
+
+      // Add reward points (1 point per 100 KES)
+      const pointsEarned = Math.floor(amount / 100);
+      if (pointsEarned > 0) {
+        await addRewardPoints(pointsEarned);
+      }
+
+    } catch (error: any) {
+      console.error('Error sending money:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const withdrawMoney = async (amount: number, method: string) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
+    try {
+      const feeEstimate = getFeeEstimate(amount, 'withdrawal');
+      const totalDeduction = amount + feeEstimate.totalFee;
+
+      if (totalDeduction > balance) {
+        throw new Error('Insufficient balance including fees');
+      }
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Update balance
+      const newBalance = balance - totalDeduction;
+      await updateUserBalance(newBalance);
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'withdrawal',
+        amount,
+        fee: feeEstimate.totalFee,
+        netAmount: feeEstimate.netAmount,
+        description: `Withdrawal via ${method}`,
+        status: 'completed',
+        direction: '-',
+        method
+      });
+
+      // Collect fee as revenue
+      if (feeEstimate.totalFee > 0) {
+        await collectRevenue(
+          feeEstimate.totalFee,
+          'withdrawal_fee',
+          `txn_${Date.now()}`,
+          currentUser.uid,
+          `Withdrawal fee from ${method}`
+        );
+      }
+
+    } catch (error: any) {
+      console.error('Error withdrawing money:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const depositMoney = async (amount: number, method: string) => {
     if (!currentUser) throw new Error('User not authenticated');
     
@@ -164,11 +353,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Simulate processing delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Update user balance
+      // Update balance (no fees for deposits)
       const newBalance = balance + amount;
       await updateUserBalance(newBalance);
 
-      // Add transaction record
+      // Add transaction
       await addTransaction({
         uid: currentUser.uid,
         type: 'deposit',
@@ -186,51 +375,250 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setLoading(false);
     }
   };
-  const createSavingsAccount = async (account: Omit<SavingsAccount, 'id' | 'createdAt' | 'status'>) => {
-    if (!currentUser) return;
 
+  const buyAirtime = async (amount: number, phoneNumber: string) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
     try {
-      const newAccount: SavingsAccount = {
-        ...account,
-        id: `sav_${Date.now()}`,
-        createdAt: new Date(),
-        status: 'active'
-      };
+      if (amount > balance) {
+        throw new Error('Insufficient balance');
+      }
 
-      const updatedSavings = [...savingsAccounts, newAccount];
-      setSavingsAccounts(updatedSavings);
-      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
-    } catch (error) {
-      console.error('Error creating savings account:', error);
-      toast.error('Failed to create savings account');
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Update balance (no fees for airtime)
+      const newBalance = balance - amount;
+      await updateUserBalance(newBalance);
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'airtime',
+        amount,
+        description: `Airtime purchase for ${phoneNumber}`,
+        status: 'completed',
+        direction: '-',
+        recipient: phoneNumber
+      });
+
+      // Add reward points
+      const pointsEarned = Math.floor(amount / 200); // 1 point per 200 KES
+      if (pointsEarned > 0) {
+        await addRewardPoints(pointsEarned);
+      }
+
+    } catch (error: any) {
+      console.error('Error buying airtime:', error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateSavingsAccount = async (id: string, updates: Partial<SavingsAccount>) => {
-    if (!currentUser) return;
-
+  const buyData = async (amount: number, phoneNumber: string, bundle: string) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
     try {
-      const updatedSavings = savingsAccounts.map(account =>
-        account.id === id ? { ...account, ...updates } : account
+      if (amount > balance) {
+        throw new Error('Insufficient balance');
+      }
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Update balance (no fees for data)
+      const newBalance = balance - amount;
+      await updateUserBalance(newBalance);
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'data',
+        amount,
+        description: `Data bundle: ${bundle} for ${phoneNumber}`,
+        status: 'completed',
+        direction: '-',
+        recipient: phoneNumber
+      });
+
+      // Add reward points
+      const pointsEarned = Math.floor(amount / 200); // 1 point per 200 KES
+      if (pointsEarned > 0) {
+        await addRewardPoints(pointsEarned);
+      }
+
+    } catch (error: any) {
+      console.error('Error buying data:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createSavingsAccount = async (principal: number, lockPeriod: number, annualInterestRate: number) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
+    try {
+      if (principal > balance) {
+        throw new Error('Insufficient balance for savings deposit');
+      }
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Create savings account
+      const startDate = new Date();
+      const maturityDate = new Date(startDate);
+      maturityDate.setMonth(maturityDate.getMonth() + lockPeriod);
+
+      const newSavingsAccount: SavingsAccount = {
+        id: `sav_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        uid: currentUser.uid,
+        principal,
+        lockPeriod,
+        annualInterestRate,
+        startDate,
+        maturityDate,
+        status: 'active'
+      };
+
+      const updatedSavings = [...savingsAccounts, newSavingsAccount];
+      setSavingsAccounts(updatedSavings);
+      localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
+
+      // Update balances
+      const newWalletBalance = balance - principal;
+      const newSavingsBalance = savingsBalance + principal;
+      
+      await updateUserBalance(newWalletBalance);
+      setSavingsBalance(newSavingsBalance);
+
+      // Update user data
+      if (user) {
+        const updatedUser = { ...user, savingsBalance: newSavingsBalance };
+        setUser(updatedUser);
+        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+      }
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'savings_deposit',
+        amount: principal,
+        description: `Savings deposit - ${lockPeriod} months at ${annualInterestRate}%`,
+        status: 'completed',
+        direction: '-'
+      });
+
+    } catch (error: any) {
+      console.error('Error creating savings account:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const withdrawFromSavings = async (savingsId: string, isEarly: boolean) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setLoading(true);
+    try {
+      const savingsAccount = savingsAccounts.find(s => s.id === savingsId);
+      if (!savingsAccount) {
+        throw new Error('Savings account not found');
+      }
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      let withdrawalAmount = savingsAccount.principal;
+      let penalty = 0;
+
+      if (isEarly) {
+        penalty = Math.round(savingsAccount.principal * 0.05); // 5% penalty
+        withdrawalAmount = savingsAccount.principal - penalty;
+      } else {
+        // Calculate earned interest for matured account
+        const monthlyRate = savingsAccount.annualInterestRate / 12 / 100;
+        const maturityValue = savingsAccount.principal * Math.pow(1 + monthlyRate, savingsAccount.lockPeriod);
+        withdrawalAmount = Math.round(maturityValue);
+      }
+
+      // Update savings accounts
+      const updatedSavings = savingsAccounts.map(s => 
+        s.id === savingsId ? { ...s, status: 'withdrawn' as const } : s
       );
       setSavingsAccounts(updatedSavings);
       localStorage.setItem(`savings_${currentUser.uid}`, JSON.stringify(updatedSavings));
-    } catch (error) {
-      console.error('Error updating savings account:', error);
-      toast.error('Failed to update savings account');
+
+      // Update balances
+      const newWalletBalance = balance + withdrawalAmount;
+      const newSavingsBalance = savingsBalance - savingsAccount.principal;
+      
+      await updateUserBalance(newWalletBalance);
+      setSavingsBalance(newSavingsBalance);
+
+      // Update user data
+      if (user) {
+        const updatedUser = { ...user, savingsBalance: newSavingsBalance };
+        setUser(updatedUser);
+        localStorage.setItem(`user_${currentUser.uid}`, JSON.stringify(updatedUser));
+      }
+
+      // Add transaction
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'savings_withdrawal',
+        amount: withdrawalAmount,
+        description: isEarly 
+          ? `Early savings withdrawal (${penalty} KES penalty)` 
+          : 'Savings maturity withdrawal',
+        status: 'completed',
+        direction: '+'
+      });
+
+      // Collect penalty as revenue if early withdrawal
+      if (penalty > 0) {
+        await collectRevenue(
+          penalty,
+          'early_withdrawal_penalty',
+          savingsId,
+          currentUser.uid,
+          `Early withdrawal penalty from savings account ${savingsId}`
+        );
+      }
+
+    } catch (error: any) {
+      console.error('Error withdrawing from savings:', error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const value = {
     user,
     balance,
+    savingsBalance,
+    rewardPoints,
     transactions,
     savingsAccounts,
-    updateUserBalance,
-    addTransaction,
+    sendMoney,
+    withdrawMoney,
     depositMoney,
+    buyAirtime,
+    buyData,
     createSavingsAccount,
-    updateSavingsAccount,
+    withdrawFromSavings,
+    updateUserBalance,
+    updateUserPremiumStatus,
+    addTransaction,
+    addRewardPoints,
+    getFeeEstimate,
     loading
   };
 

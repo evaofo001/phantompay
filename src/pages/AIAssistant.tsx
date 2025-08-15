@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Brain, Send, User, Bot, TrendingUp, DollarSign, Target, PiggyBank, Crown, Zap } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
+import { format } from 'date-fns';
 
 interface Message {
   id: string;

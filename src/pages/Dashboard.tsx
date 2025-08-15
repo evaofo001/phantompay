@@ -12,11 +12,10 @@ import {
   Minus,
   Crown,
   Calendar,
-  ToggleLeft,
-  ToggleRight,
   Zap,
   PiggyBank,
-  Brain
+  Brain,
+  Target
 } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
