@@ -14,7 +14,7 @@ import {
   Minus,
   Shield,
   Target,
-  PiggyBank
+  PiggyBank,
   Plus,
   Download,
   Smartphone,
@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdmin } from '../contexts/AdminContext';
-import { Download } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
