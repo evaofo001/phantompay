@@ -163,12 +163,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       });
 
-      // Return cleanup function
-      return () => {
-        unsubscribeWallet();
-        unsubscribeRevenue();
-        unsubscribeStats();
-      };
 
     } catch (error) {
       console.error('Error setting up admin listeners:', error);

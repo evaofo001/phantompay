@@ -61,58 +61,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
-      setLoading(false);
       throw error; // Re-throw to be caught by UI
     }
   };
 
   const register = async (email: string, password: string) => {
-    setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
-      setLoading(false);
       throw error;
     }
   };
 
   const loginWithGoogle = async () => {
-    setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(firebaseAuth, provider);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
-      setLoading(false);
       throw error;
     }
   };
 
   const sendEmailSignInLink = async (email: string) => {
-    setLoading(true);
     try {
       await sendEmailLink(email);
     } catch (error) {
-      setLoading(false);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const completeEmailSignIn = async (email?: string) => {
-    setLoading(true);
     try {
       await completeEmailLinkSignIn(email);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
-      setLoading(false);
       throw error;
     }
   };
@@ -121,31 +109,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return isEmailLinkSignIn();
   };
   const logout = async () => {
-    setLoading(true);
     try {
       await signOut(firebaseAuth);
       // currentUser will be set to null by onAuthStateChanged listener
     } catch (error) {
-      setLoading(false);
       throw error;
     }
   };
 
-  // Fallback for initial load if onAuthStateChanged hasn't fired yet but localStorage has a user
-  // This helps prevent flickering if the user was already logged in
-  useEffect(() => {
-    if (loading && !currentUser) {
-      const savedUser = localStorage.getItem('phantompay_user');
-      if (savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          setCurrentUser(parsedUser);
-        } catch (e) {
-          console.error("Failed to parse user from localStorage", e);
-        }
-      }
-    }
-  }, [loading, currentUser]);
 
   const value = {
     currentUser,
@@ -161,7 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

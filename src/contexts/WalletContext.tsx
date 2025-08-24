@@ -85,7 +85,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser) return;
 
     try {
-      setLoading(true);
       
       // Try to migrate data from localStorage first
       await migrateUserDataFromLocalStorage(currentUser.uid);
@@ -140,8 +139,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (error) {
       console.error('Error loading user data:', error);
       toast.error('Failed to load user data');
-    } finally {
-      setLoading(false);
     }
   };
 

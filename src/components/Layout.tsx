@@ -15,6 +15,10 @@ import {
   Shield,
   Target,
   PiggyBank
+  Plus,
+  Download,
+  Smartphone,
+  Building
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdmin } from '../contexts/AdminContext';

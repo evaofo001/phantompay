@@ -23,12 +23,9 @@ export interface AdminWallet {
   balance: number;
   totalRevenue: number;
   totalExpenses: number;
-  totalExpenses: number;
   monthlyRevenue: number;
   monthlyExpenses: number;
-  monthlyExpenses: number;
   dailyRevenue: number;
-  dailyExpenses: number;
   dailyExpenses: number;
   lastUpdated: Date;
 }

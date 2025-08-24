@@ -27,7 +27,9 @@ import {
   Zap,
   Brain,
   FileText,
-  TrendingDown
+  TrendingDown,
+  Smartphone,
+  Building
 } from 'lucide-react';
 import { useAdmin } from '../contexts/AdminContext';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';

@@ -26,120 +26,103 @@ import EmailLinkHandler from './components/EmailLinkHandler';
 function App() {
   return (
     <AuthProvider>
-      <AdminProvider>
-        <LoanProvider>
-          <WalletProvider>
-            <Router>
-              <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/auth/email-link" element={<EmailLinkHandler />} />
-                  
-                  {/* Admin Routes */}
-                  <Route path="/admin" element={
-                    <ProtectedRoute>
-                      <AdminRoute>
-                        <Layout>
-                          <AdminDashboard />
-                        </Layout>
-                      </AdminRoute>
-                    </ProtectedRoute>
-                  } />
-                  
-                  {/* Regular User Routes */}
-                  <Route path="/" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Dashboard />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/transfer" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Transfer />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/deposit" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Deposit />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/transactions" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Transactions />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/rewards" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Rewards />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/loans" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Loans />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/savings" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Savings />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/ai-assistant" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <AIAssistant />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/settings" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Settings />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/premium" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Premium />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/withdraw" element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Withdraw />
-                      </Layout>
-                    </ProtectedRoute>
-                  } />
-                </Routes>
-                <Toaster 
-                  position="top-right"
-                  toastOptions={{
-                    duration: 4000,
-                    style: {
-                      background: '#363636',
-                      color: '#fff',
-                    },
-                  }}
-                />
-              </div>
-            </Router>
-          </WalletProvider>
-        </LoanProvider>
-      </AdminProvider>
+      <Router>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/email-link" element={<EmailLinkHandler />} />
+            
+            {/* Protected Routes */}
+            <Route path="/*" element={
+              <ProtectedRoute>
+                <AdminProvider>
+                  <LoanProvider>
+                    <WalletProvider>
+                      <Routes>
+                        {/* Admin Routes */}
+                        <Route path="/admin" element={
+                          <AdminRoute>
+                            <Layout>
+                              <AdminDashboard />
+                            </Layout>
+                          </AdminRoute>
+                        } />
+                        
+                        {/* Regular User Routes */}
+                        <Route path="/" element={
+                          <Layout>
+                            <Dashboard />
+                          </Layout>
+                        } />
+                        <Route path="/transfer" element={
+                          <Layout>
+                            <Transfer />
+                          </Layout>
+                        } />
+                        <Route path="/deposit" element={
+                          <Layout>
+                            <Deposit />
+                          </Layout>
+                        } />
+                        <Route path="/transactions" element={
+                          <Layout>
+                            <Transactions />
+                          </Layout>
+                        } />
+                        <Route path="/rewards" element={
+                          <Layout>
+                            <Rewards />
+                          </Layout>
+                        } />
+                        <Route path="/loans" element={
+                          <Layout>
+                            <Loans />
+                          </Layout>
+                        } />
+                        <Route path="/savings" element={
+                          <Layout>
+                            <Savings />
+                          </Layout>
+                        } />
+                        <Route path="/ai-assistant" element={
+                          <Layout>
+                            <AIAssistant />
+                          </Layout>
+                        } />
+                        <Route path="/settings" element={
+                          <Layout>
+                            <Settings />
+                          </Layout>
+                        } />
+                        <Route path="/premium" element={
+                          <Layout>
+                            <Premium />
+                          </Layout>
+                        } />
+                        <Route path="/withdraw" element={
+                          <Layout>
+                            <Withdraw />
+                          </Layout>
+                        } />
+                      </Routes>
+                    </WalletProvider>
+                  </LoanProvider>
+                </AdminProvider>
+              </ProtectedRoute>
+            } />
+          </Routes>
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
+              },
+            }}
+          />
+        </div>
+      </Router>
     </AuthProvider>
   );
 }
