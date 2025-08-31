@@ -38,6 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Use Firebase onAuthStateChanged to manage user session
   useEffect(() => {
+    setLoading(true);
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (user) {
         // User is signed in

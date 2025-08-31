@@ -62,13 +62,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [rewardPoints, setRewardPoints] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [savingsAccounts, setSavingsAccounts] = useState<SavingsAccount[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (currentUser) {
       loadUserData();
     } else {
       resetUserData();
+      setLoading(false);
     }
   }, [currentUser]);
 
@@ -85,6 +86,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUser) return;
 
     try {
+      setLoading(true);
       
       // Try to migrate data from localStorage first
       await migrateUserDataFromLocalStorage(currentUser.uid);
@@ -92,28 +94,39 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Set up real-time listener for user document
       const userDocRef = doc(db, 'users', currentUser.uid);
       const unsubscribeUser = onSnapshot(userDocRef, async (doc) => {
-        if (doc.exists()) {
-          const userData = { uid: currentUser.uid, ...doc.data() } as User;
-          setUser(userData);
-          setBalance(userData.walletBalance || 0);
-          setSavingsBalance(userData.savingsBalance || 0);
-          setRewardPoints(userData.rewardPoints || 0);
-        } else {
-          // Create new user document
-          const newUser: User = {
-            uid: currentUser.uid,
-            email: currentUser.email || '',
-            displayName: currentUser.displayName || '',
-            walletBalance: 0,
-            savingsBalance: 0,
-            rewardPoints: 0,
-            totalEarnedInterest: 0,
-            premiumStatus: false,
-            referralsCount: 0,
-            referralEarnings: 0,
-            kycVerified: false,
-            createdAt: new Date()
-          };
+        try {
+          if (doc.exists()) {
+            const userData = { uid: currentUser.uid, ...doc.data() } as User;
+            setUser(userData);
+            setBalance(userData.walletBalance || 0);
+            setSavingsBalance(userData.savingsBalance || 0);
+            setRewardPoints(userData.rewardPoints || 0);
+          } else {
+            // Create new user document
+            const newUser: User = {
+              uid: currentUser.uid,
+              email: currentUser.email || '',
+              displayName: currentUser.displayName || '',
+              walletBalance: 0,
+              savingsBalance: 0,
+              rewardPoints: 0,
+              totalEarnedInterest: 0,
+              premiumStatus: false,
+              referralsCount: 0,
+              referralEarnings: 0,
+              kycVerified: false,
+              createdAt: new Date()
+            };
+            
+            await createUserDocument(currentUser.uid, newUser);
+          }
+          
+          // Set loading to false after user data is loaded
+          setLoading(false);
+        } catch (error) {
+          console.error('Error in user document listener:', error);
+          setLoading(false);
+        }
           
           await createUserDocument(currentUser.uid, newUser);
         }
@@ -139,6 +152,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (error) {
       console.error('Error loading user data:', error);
       toast.error('Failed to load user data');
+      setLoading(false);
     }
   };
 

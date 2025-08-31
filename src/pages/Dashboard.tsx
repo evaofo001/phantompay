@@ -22,8 +22,20 @@ import { useAuth } from '../contexts/AuthContext';
 import { format, addDays } from 'date-fns';
 
 const Dashboard: React.FC = () => {
-  const { balance, rewardPoints, transactions, user } = useWallet();
+  const { balance, rewardPoints, transactions, user, loading } = useWallet();
   const { currentUser } = useAuth();
+
+  // Show loading state while wallet data is being fetched
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   const recentTransactions = transactions.slice(0, 5);
 
