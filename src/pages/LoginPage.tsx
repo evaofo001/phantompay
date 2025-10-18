@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoredEmailForSignIn } from '../utils/emailLinkAuth';
+import { generateOTP, storeOTP, verifyOTP, sendOTPEmail, getOTPExpiryTime } from '../utils/otpUtils';
 import toast from 'react-hot-toast';
 
 interface LoginForm {
@@ -28,19 +29,25 @@ const LoginPage: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpPassword, setOtpPassword] = useState('');
+  const [otpExpiryTime, setOtpExpiryTime] = useState<number | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
   
   const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth } = useAuth();
   
   const loginForm = useForm<LoginForm>();
   const registerForm = useForm<RegisterForm>();
   const emailLinkForm = useForm<{ email: string }>();
+  const otpForm = useForm<VerificationForm>();
 
   if (currentUser) {
     return <Navigate to="/" replace />;
   }
 
   // Check if this is an email link sign-in on component mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (isEmailLinkAuth()) {
       const storedEmail = getStoredEmailForSignIn();
       if (storedEmail) {
@@ -52,11 +59,61 @@ const LoginPage: React.FC = () => {
     }
   }, []);
 
+  // OTP Timer
+  useEffect(() => {
+    if (!otpExpiryTime) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const remaining = otpExpiryTime - now;
+
+      if (remaining <= 0) {
+        setTimeRemaining('Expired');
+        setOtpExpiryTime(null);
+        clearInterval(interval);
+      } else {
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [otpExpiryTime]);
+
   const onLoginSubmit = async (data: LoginForm) => {
     setLoading(true);
     try {
-      await login(data.email, data.password);
-      toast.success('Welcome back!');
+      const otp = generateOTP();
+      storeOTP(data.email, otp);
+      await sendOTPEmail(data.email, otp);
+
+      setOtpEmail(data.email);
+      setOtpPassword(data.password);
+      setShowOTPVerification(true);
+      setOtpExpiryTime(getOTPExpiryTime(data.email));
+
+      toast.success(`OTP sent to ${data.email}. Check your console/email.`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onOTPVerificationSubmit = async (data: VerificationForm) => {
+    setLoading(true);
+    try {
+      const result = verifyOTP(otpEmail, data.verificationCode);
+
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      await login(otpEmail, otpPassword);
+      toast.success('Successfully logged in!');
+      setShowOTPVerification(false);
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
     } finally {
@@ -206,8 +263,89 @@ const LoginPage: React.FC = () => {
             </>
           )}
 
+          {/* OTP Verification Form */}
+          {showOTPVerification && (
+            <>
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-green-100 p-3 rounded-full">
+                    <Shield className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                  Verify OTP
+                </h3>
+                <p className="text-gray-600 text-center mt-2">
+                  Enter the 6-digit code sent to {otpEmail}
+                </p>
+                {timeRemaining && (
+                  <p className="text-sm text-center mt-2 font-medium text-blue-600">
+                    {timeRemaining === 'Expired' ? (
+                      <span className="text-red-600">Code expired</span>
+                    ) : (
+                      <>Expires in: {timeRemaining}</>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              <form onSubmit={otpForm.handleSubmit(onOTPVerificationSubmit)} className="space-y-6">
+                <div>
+                  <label htmlFor="verificationCode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Verification Code
+                  </label>
+                  <input
+                    {...otpForm.register('verificationCode', {
+                      required: 'Verification code is required',
+                      pattern: {
+                        value: /^\d{6}$/,
+                        message: 'Code must be 6 digits'
+                      }
+                    })}
+                    type="text"
+                    maxLength={6}
+                    className="block w-full px-4 py-3 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors tracking-widest"
+                    placeholder="000000"
+                  />
+                  {otpForm.formState.errors.verificationCode && (
+                    <p className="mt-1 text-sm text-red-600">{otpForm.formState.errors.verificationCode.message}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Verifying...
+                    </div>
+                  ) : (
+                    'Verify & Sign In'
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => {
+                    setShowOTPVerification(false);
+                    setOtpEmail('');
+                    setOtpPassword('');
+                    setOtpExpiryTime(null);
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                >
+                  Back to login
+                </button>
+              </div>
+            </>
+          )}
+
           {/* Login Form */}
-          {isLogin && !isEmailLink && (
+          {isLogin && !isEmailLink && !showOTPVerification && (
             <>
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 text-center">

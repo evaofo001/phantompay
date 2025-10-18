@@ -63,18 +63,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setUser(null);
       setTransactions([]);
       setSavingsAccounts([]);
+      setLoading(false);
       return;
     }
+
+    let unsubscribeTransactions: (() => void) | undefined;
+    let unsubscribeSavings: (() => void) | undefined;
 
     const initializeUserData = async () => {
       setLoading(true);
       try {
         // Try to migrate data from localStorage first
         await migrateUserDataFromLocalStorage(currentUser.uid);
-        
+
         // Get or create user document
         let userData = await getUserDocument(currentUser.uid);
-        
+
         if (!userData) {
           // Create new user document
           const newUserData: Partial<User> = {
@@ -89,21 +93,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             referralEarnings: 0,
             kycVerified: false
           };
-          
+
           await createUserDocument(currentUser.uid, newUserData);
           userData = await getUserDocument(currentUser.uid);
         }
-        
+
         setUser(userData);
-        
+
         // Set up real-time listeners
-        const unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
+        unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
           setTransactions(transactionsList);
         });
-        
-        const unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
+
+        unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
           setSavingsAccounts(savingsList);
-          
+
           // Update savings balance
           const totalSavings = savingsList.reduce((total, account) => {
             if (account.status === 'active') {
@@ -117,17 +121,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
             return total;
           }, 0);
-          
+
           // Update user's savings balance
           if (userData && totalSavings !== userData.savingsBalance) {
             updateUserDocument(currentUser.uid, { savingsBalance: totalSavings });
           }
         });
-
-        return () => {
-          unsubscribeTransactions();
-          unsubscribeSavings();
-        };
       } catch (error) {
         console.error('Error initializing user data:', error);
         toast.error('Failed to load user data');
@@ -137,6 +136,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     initializeUserData();
+
+    return () => {
+      if (unsubscribeTransactions) unsubscribeTransactions();
+      if (unsubscribeSavings) unsubscribeSavings();
+    };
   }, [currentUser]);
 
   const getUserPremiumTier = () => {

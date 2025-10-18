@@ -6,24 +6,31 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
-export const actionCodeSettings: ActionCodeSettings = {
-  url: `${window.location.protocol}//${window.location.host}/auth/email-link`,
-  handleCodeInApp: true,
-  iOS: {
-    bundleId: 'com.phantompay.ios'
-  },
-  android: {
-    packageName: 'com.phantompay.android',
-    installApp: true,
-    minimumVersion: '12'
-  }
+export const getActionCodeSettings = (): ActionCodeSettings => {
+  const baseUrl = window.location.hostname === 'localhost'
+    ? 'http://localhost:5173'
+    : `${window.location.protocol}//${window.location.host}`;
+
+  return {
+    url: `${baseUrl}/login`,
+    handleCodeInApp: true,
+    iOS: {
+      bundleId: 'com.phantompay.ios'
+    },
+    android: {
+      packageName: 'com.phantompay.android',
+      installApp: true,
+      minimumVersion: '12'
+    }
+  };
 };
 
 export const sendEmailLink = async (email: string): Promise<void> => {
   try {
+    const actionCodeSettings = getActionCodeSettings();
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
     window.localStorage.setItem('emailForSignIn', email);
-    console.log('Email link sent successfully');
+    console.log('Email link sent successfully to:', email);
   } catch (error: any) {
     console.error('Error sending email link:', error);
     throw new Error(error.message || 'Failed to send email link');
