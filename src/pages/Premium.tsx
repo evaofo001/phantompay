@@ -26,7 +26,7 @@ interface PremiumPlan {
 
 const Premium: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<string>('plus');
-  const { user, balance, updateUserPremiumStatus, addTransaction, loading } = useWallet();
+  const { user, balance, updateUserPremiumStatus, addTransaction, updateUserBalance, loading } = useWallet();
   const [subscribing, setSubscribing] = useState(false);
 
   const formatCurrency = (amount: number) => {
@@ -151,6 +151,10 @@ const Premium: React.FC = () => {
       
       // Deduct subscription fee from balance and add transaction
       if (plan.price > 0) {
+        // Update user balance
+        const newBalance = (user?.walletBalance || 0) - plan.price;
+        await updateUserBalance(newBalance);
+        
         await addTransaction({
           uid: user?.uid || '',
           type: 'subscription',
@@ -169,7 +173,12 @@ const Premium: React.FC = () => {
     }
   };
 
-  const currentPlan = user?.premiumStatus ? (user as any).premiumPlan || 'plus' : 'basic';
+  const currentPlan = user?.premiumStatus ? user.premiumPlan || 'plus' : 'basic';
+
+  // Check if user has premium badge
+  const hasPremiumBadge = user?.premiumStatus && user.premiumPlan && user.premiumPlan !== 'basic';
+  const badgeText = user?.premiumPlan === 'vip' ? 'VIP' : user?.premiumPlan === 'plus' ? 'PLUS' : '';
+  const badgeColor = user?.premiumPlan === 'vip' ? 'from-yellow-500 to-orange-600' : 'from-purple-500 to-indigo-600';
 
   // Fee comparison example
   const exampleAmount = 10000;
@@ -198,28 +207,23 @@ const Premium: React.FC = () => {
       {/* Current Status */}
       {user && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Current Plan</h3>
-              <p className="text-blue-600 font-medium flex items-center">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Current Plan</h3>
+            <div className="flex items-center space-x-2">
+              <p className="text-blue-600 font-medium">
                 {plans.find(p => p.id === currentPlan)?.name}
-                {user.premiumStatus && (
-                  <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    <Crown className="h-3 w-3 mr-1" />
-                    Active
-                  </span>
-                )}
               </p>
-              {user.premiumStatus && (user as any).premiumExpiry && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Expires: {new Date((user as any).premiumExpiry).toLocaleDateString()}
-                </p>
+              {hasPremiumBadge && (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r ${badgeColor} text-white`}>
+                  <Crown className="h-3 w-3 mr-1" />
+                  {badgeText}
+                </span>
               )}
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Available Balance</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(balance)}</p>
-            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-600">Available Balance</p>
+            <p className="text-xl font-bold text-gray-900">{formatCurrency(balance)}</p>
           </div>
         </div>
       )}

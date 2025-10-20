@@ -12,6 +12,9 @@ export interface User {
   premiumExpiry?: Date;
   referralsCount: number;
   referralEarnings: number;
+  referralCode?: string;
+  achievements?: Achievement[];
+  challenges?: Challenge[];
   kycVerified: boolean;
   createdAt: Date;
   profile?: UserProfile;
@@ -143,4 +146,36 @@ export interface PlatformStats {
   overdueLoans: number;
   totalExpenses: number;
   aiAssistantUsage: number;
+}
+
+export interface Referral {
+  id: string;
+  referrerId: string;
+  refereeId: string;
+  referralCode: string;
+  status: 'pending' | 'completed' | 'expired';
+  createdAt: Date;
+  completedAt?: Date;
+  rewardPointsEarned: number;
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  progress: number;
+  rewardPoints: number;
+  endDate: Date;
+  completed: boolean;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  points: number;
+  completed: boolean;
+  completedAt?: Date;
 }

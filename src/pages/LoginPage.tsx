@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon, Shield } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon, Shield, Phone, RotateCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoredEmailForSignIn } from '../utils/emailLinkAuth';
 import { generateOTP, storeOTP, verifyOTP, sendOTPEmail, getOTPExpiryTime } from '../utils/otpUtils';
+import { auth, RecaptchaVerifier } from '../config/firebase';
 import toast from 'react-hot-toast';
 
 interface LoginForm {
@@ -34,13 +35,21 @@ const LoginPage: React.FC = () => {
   const [otpPassword, setOtpPassword] = useState('');
   const [otpExpiryTime, setOtpExpiryTime] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showPhoneAuth, setShowPhoneAuth] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<any>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const recaptchaVerifierRef = useRef<any>(null);
   
-  const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth } = useAuth();
+  const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth, sendPasswordResetEmail, loginWithPhoneNumber, confirmPhoneNumberCode } = useAuth();
   
   const loginForm = useForm<LoginForm>();
   const registerForm = useForm<RegisterForm>();
   const emailLinkForm = useForm<{ email: string }>();
   const otpForm = useForm<VerificationForm>();
+  const forgotPasswordForm = useForm<{ email: string }>();
+  const phoneForm = useForm<{ phoneNumber: string }>();
+  const phoneCodeForm = useForm<{ code: string }>();
 
   if (currentUser) {
     return <Navigate to="/" replace />;
@@ -166,6 +175,54 @@ const LoginPage: React.FC = () => {
     } catch (error: any) {
       toast.error(error.message || 'Failed to complete email link sign-in');
       setIsEmailLink(true); // Show email input form
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (data: { email: string }) => {
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(data.email);
+      toast.success(`Password reset link sent to ${data.email}! Check your inbox.`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send password reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhoneAuth = async (data: { phoneNumber: string }) => {
+    setLoading(true);
+    try {
+      // Create reCAPTCHA verifier if not exists
+      if (!recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible'
+        });
+      }
+
+      const result = await loginWithPhoneNumber(data.phoneNumber, recaptchaVerifierRef.current);
+      setConfirmationResult(result);
+      setPhoneNumber(data.phoneNumber);
+      setShowPhoneAuth(true);
+      toast.success('Verification code sent to your phone!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhoneCodeVerification = async (data: { code: string }) => {
+    setLoading(true);
+    try {
+      await confirmPhoneNumberCode(confirmationResult, data.code);
+      toast.success('Successfully signed in with phone number!');
+      setShowPhoneAuth(false);
+      setConfirmationResult(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Invalid verification code');
     } finally {
       setLoading(false);
     }
@@ -432,6 +489,16 @@ const LoginPage: React.FC = () => {
                 </button>
               </form>
 
+              {/* Forgot Password Option */}
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-purple-600 hover:text-purple-500 font-medium"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
               {/* Email Link Option */}
               <div className="mt-6">
                 <div className="relative">
@@ -481,6 +548,28 @@ const LoginPage: React.FC = () => {
                       )}
                     </div>
                   </form>
+                </div>
+              </div>
+
+              {/* Phone Authentication Option */}
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or</span>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <button
+                    onClick={() => setShowPhoneAuth(true)}
+                    className="w-full inline-flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    <Phone className="h-5 w-5 mr-2 text-gray-400" />
+                    Sign in with Phone
+                  </button>
                 </div>
               </div>
             </>
@@ -662,8 +751,223 @@ const LoginPage: React.FC = () => {
             </>
           )}
 
+          {/* Forgot Password Form */}
+          {showForgotPassword && (
+            <>
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-blue-100 p-3 rounded-full">
+                    <RotateCw className="h-8 w-8 text-blue-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                  Reset Password
+                </h3>
+                <p className="text-gray-600 text-center mt-2">
+                  Enter your email to receive a password reset link
+                </p>
+              </div>
+          
+              <form onSubmit={forgotPasswordForm.handleSubmit(handlePasswordReset)} className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      {...forgotPasswordForm.register('email', { 
+                        required: 'Email is required',
+                        pattern: {
+                          value: /^\S+@\S+$/i,
+                          message: 'Invalid email address'
+                        }
+                      })}
+                      type="email"
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors"
+                      placeholder="Enter your email"
+                    />
+                  </div>
+                  {forgotPasswordForm.formState.errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{forgotPasswordForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+          
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Sending Reset Link...
+                    </div>
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </button>
+              </form>
+          
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => setShowForgotPassword(false)}
+                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                >
+                  Back to login
+                </button>
+              </div>
+            </>
+          )}
+          
+          {/* Phone Authentication Form */}
+          {showPhoneAuth && !confirmationResult && (
+            <>
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-green-100 p-3 rounded-full">
+                    <Phone className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                  Phone Authentication
+                </h3>
+                <p className="text-gray-600 text-center mt-2">
+                  Enter your phone number to receive a verification code
+                </p>
+              </div>
+          
+              <form onSubmit={phoneForm.handleSubmit(handlePhoneAuth)} className="space-y-6">
+                <div>
+                  <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Phone className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      {...phoneForm.register('phoneNumber', { 
+                        required: 'Phone number is required',
+                        pattern: {
+                          value: /^\+[1-9]\d{1,14}$/,
+                          message: 'Please enter a valid phone number with country code (e.g., +254712345678)'
+                        }
+                      })}
+                      type="tel"
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors"
+                      placeholder="+254712345678"
+                    />
+                  </div>
+                  {phoneForm.formState.errors.phoneNumber && (
+                    <p className="mt-1 text-sm text-red-600">{phoneForm.formState.errors.phoneNumber.message}</p>
+                  )}
+                </div>
+          
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Sending Code...
+                    </div>
+                  ) : (
+                    'Send Verification Code'
+                  )}
+                </button>
+              </form>
+          
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => setShowPhoneAuth(false)}
+                  className="text-sm text-green-600 hover:text-green-500 font-medium"
+                >
+                  Back to login
+                </button>
+              </div>
+            </>
+          )}
+          
+          {/* Phone Code Verification Form */}
+          {showPhoneAuth && confirmationResult && (
+            <>
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="bg-green-100 p-3 rounded-full">
+                    <Shield className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                  Verify Phone Number
+                </h3>
+                <p className="text-gray-600 text-center mt-2">
+                  Enter the 6-digit code sent to {phoneNumber}
+                </p>
+              </div>
+          
+              <form onSubmit={phoneCodeForm.handleSubmit(handlePhoneCodeVerification)} className="space-y-6">
+                <div>
+                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
+                    Verification Code
+                  </label>
+                  <input
+                    {...phoneCodeForm.register('code', {
+                      required: 'Verification code is required',
+                      pattern: {
+                        value: /^\d{6}$/,
+                        message: 'Code must be 6 digits'
+                      }
+                    })}
+                    type="text"
+                    maxLength={6}
+                    className="block w-full px-4 py-3 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors tracking-widest"
+                    placeholder="000000"
+                  />
+                  {phoneCodeForm.formState.errors.code && (
+                    <p className="mt-1 text-sm text-red-600">{phoneCodeForm.formState.errors.code.message}</p>
+                  )}
+                </div>
+          
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Verifying...
+                    </div>
+                  ) : (
+                    'Verify & Sign In'
+                  )}
+                </button>
+              </form>
+          
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => {
+                    setShowPhoneAuth(false);
+                    setConfirmationResult(null);
+                  }}
+                  className="text-sm text-green-600 hover:text-green-500 font-medium"
+                >
+                  Back to login
+                </button>
+              </div>
+            </>
+          )}
+          
+          {/* ReCAPTCHA Container */}
+          <div id="recaptcha-container" className="mt-4"></div>
+          
           {/* Show pending email link message */}
-          {pendingEmail && !isEmailLink && (
+          {pendingEmail && !isEmailLink && !showForgotPassword && !showPhoneAuth && (
             <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center">
                 <Mail className="h-5 w-5 text-blue-600 mr-2" />

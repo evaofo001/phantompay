@@ -1,5 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth as firebaseAuth, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, onAuthStateChanged } from '../config/firebase';
+import { 
+  auth as firebaseAuth, 
+  GoogleAuthProvider, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  signInWithPopup, 
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  PhoneAuthProvider,
+  updatePassword as firebaseUpdatePassword,
+  updateEmail as firebaseUpdateEmail,
+  sendEmailVerification as firebaseSendEmailVerification
+} from '../config/firebase';
 import { sendEmailLink, completeEmailLinkSignIn, isEmailLinkSignIn } from '../utils/emailLinkAuth';
 
 // Mock User interface to match Firebase User
@@ -17,6 +32,12 @@ interface AuthContextType {
   sendEmailSignInLink: (email: string) => Promise<void>;
   completeEmailSignIn: (email?: string) => Promise<void>;
   isEmailLinkAuth: () => boolean;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
+  loginWithPhoneNumber: (phoneNumber: string, appVerifier: any) => Promise<any>;
+  confirmPhoneNumberCode: (confirmationResult: any, code: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  updateEmail: (newEmail: string) => Promise<void>;
+  sendEmailVerification: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -108,6 +129,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isEmailLinkAuth = (): boolean => {
     return isEmailLinkSignIn();
   };
+
+  const sendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(firebaseAuth, email);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const loginWithPhoneNumber = async (phoneNumber: string, appVerifier: any) => {
+    try {
+      const confirmationResult = await signInWithPhoneNumber(firebaseAuth, phoneNumber, appVerifier);
+      return confirmationResult;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const confirmPhoneNumberCode = async (confirmationResult: any, code: string) => {
+    try {
+      await confirmationResult.confirm(code);
+      // currentUser will be set by onAuthStateChanged listener
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    try {
+      if (!firebaseAuth.currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+      await firebaseUpdatePassword(firebaseAuth.currentUser, newPassword);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const updateEmail = async (newEmail: string) => {
+    try {
+      if (!firebaseAuth.currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+      await firebaseUpdateEmail(firebaseAuth.currentUser, newEmail);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const sendEmailVerification = async () => {
+    try {
+      if (!firebaseAuth.currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+      await firebaseSendEmailVerification(firebaseAuth.currentUser);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(firebaseAuth);
@@ -126,6 +207,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sendEmailSignInLink,
     completeEmailSignIn,
     isEmailLinkAuth,
+    sendPasswordResetEmail: sendPasswordReset,
+    loginWithPhoneNumber,
+    confirmPhoneNumberCode,
+    updatePassword,
+    updateEmail,
+    sendEmailVerification,
     logout,
     loading
   };

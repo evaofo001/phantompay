@@ -1,9 +1,10 @@
 import React from 'react';
 import { Gift, Star, TrendingUp, Award, Calendar, Zap } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import toast from 'react-hot-toast';
 
 const Rewards: React.FC = () => {
-  const { rewardPoints, balance, addRewardPoints } = useWallet();
+  const { rewardPoints, balance, addRewardPoints, transactions } = useWallet();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -39,7 +40,8 @@ const Rewards: React.FC = () => {
       icon: Star,
       color: 'from-purple-500 to-purple-600',
       active: true,
-      requirement: 'Friend must complete first transaction'
+      requirement: 'Friend must complete first transaction',
+      link: '/referral' // Add link to referral page
     },
     {
       id: 4,
@@ -91,7 +93,7 @@ const Rewards: React.FC = () => {
     if (option.available) {
       // Deduct points and add value to wallet
       const pointsToDeduct = -option.points;
-      addRewardPoints(pointsToDeduct);
+      addRewardPoints(pointsToDeduct, option.title);
       
       // For cash conversion, add money to wallet
       if (option.id === 1) {
@@ -102,6 +104,113 @@ const Rewards: React.FC = () => {
       toast.success(`Successfully redeemed ${option.points} points! 🎉`);
     }
   };
+
+  // Calculate progress data based on transactions
+  const calculateProgress = () => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    const monthlyTransactions = transactions.filter((transaction: any) => {
+      if (transaction.type !== 'reward') return false;
+      const transactionDate = new Date(transaction.timestamp);
+      return transactionDate.getMonth() === currentMonth && 
+             transactionDate.getFullYear() === currentYear;
+    });
+    
+    const pointsEarned = monthlyTransactions
+      .filter((t: any) => t.direction === '+')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
+      
+    const pointsRedeemed = monthlyTransactions
+      .filter((t: any) => t.direction === '-')
+      .reduce((sum: number, t: any) => sum + t.amount, 0);
+      
+    // Tier system
+    const totalPoints = rewardPoints;
+    let currentTier = 'Bronze';
+    let nextTier = 'Silver';
+    let pointsToNextTier = 500 - (totalPoints % 500);
+    let progressPercentage = (totalPoints % 500) / 500 * 100;
+    let tierBenefits = [
+      'Basic reward redemption',
+      'Standard customer support',
+      'Monthly progress tracking'
+    ];
+    
+    if (totalPoints >= 1000) {
+      currentTier = 'Gold';
+      nextTier = 'Platinum';
+      pointsToNextTier = 2000 - (totalPoints % 2000);
+      progressPercentage = (totalPoints % 2000) / 2000 * 100;
+      tierBenefits = [
+        'All Bronze & Silver benefits',
+        'Exclusive Gold rewards',
+        'Priority customer support',
+        'Special promotional offers',
+        'Early access to new features'
+      ];
+    } else if (totalPoints >= 500) {
+      currentTier = 'Silver';
+      nextTier = 'Gold';
+      pointsToNextTier = 1000 - (totalPoints % 1000);
+      progressPercentage = (totalPoints % 1000) / 1000 * 100;
+      tierBenefits = [
+        'All Bronze benefits',
+        'Enhanced reward redemption',
+        'Priority customer support',
+        'Special promotional offers'
+      ];
+    }
+    
+    return {
+      pointsEarned,
+      pointsRedeemed,
+      currentTier,
+      nextTier,
+      pointsToNextTier,
+      progressPercentage,
+      tierBenefits
+    };
+  };
+
+  const progressData = calculateProgress();
+
+  // Tier benefits information
+  const tierInfo = [
+    {
+      name: 'Bronze',
+      minPoints: 0,
+      color: 'from-amber-600 to-amber-800',
+      benefits: [
+        'Basic reward redemption',
+        'Standard customer support',
+        'Monthly progress tracking'
+      ]
+    },
+    {
+      name: 'Silver',
+      minPoints: 500,
+      color: 'from-gray-300 to-gray-500',
+      benefits: [
+        'All Bronze benefits',
+        'Enhanced reward redemption',
+        'Priority customer support',
+        'Special promotional offers'
+      ]
+    },
+    {
+      name: 'Gold',
+      minPoints: 1000,
+      color: 'from-yellow-300 to-yellow-500',
+      benefits: [
+        'All Bronze & Silver benefits',
+        'Exclusive Gold rewards',
+        'Priority customer support',
+        'Special promotional offers',
+        'Early access to new features'
+      ]
+    }
+  ];
 
   return (
     <div className="space-y-6">
@@ -200,23 +309,60 @@ const Rewards: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Progress This Month</h3>
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="bg-white rounded-lg p-4">
-            <p className="text-2xl font-bold text-purple-600">250</p>
+            <p className="text-2xl font-bold text-purple-600">{progressData.pointsEarned}</p>
             <p className="text-sm text-gray-600">Points Earned</p>
           </div>
           <div className="bg-white rounded-lg p-4">
-            <p className="text-2xl font-bold text-pink-600">125</p>
+            <p className="text-2xl font-bold text-pink-600">{progressData.pointsRedeemed}</p>
             <p className="text-sm text-gray-600">Points Redeemed</p>
           </div>
         </div>
         <div className="mt-4">
           <div className="flex justify-between text-sm text-gray-600 mb-2">
             <span>Progress to next tier</span>
-            <span>750 / 1000 points</span>
+            <span>{rewardPoints} / {rewardPoints + progressData.pointsToNextTier} points</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full" style={{ width: '75%' }}></div>
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full" style={{ width: `${progressData.progressPercentage}%` }}></div>
           </div>
-          <p className="text-xs text-gray-500 mt-2">250 more points to reach Gold tier</p>
+          <p className="text-xs text-gray-500 mt-2">{progressData.pointsToNextTier} more points to reach {progressData.nextTier} tier</p>
+        </div>
+      </div>
+
+      {/* Tier Benefits Section */}
+      <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Tier Benefits</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {tierInfo.map((tier) => (
+            <div 
+              key={tier.name} 
+              className={`border rounded-xl p-4 ${
+                progressData.currentTier === tier.name 
+                  ? 'border-orange-300 ring-2 ring-orange-100' 
+                  : 'border-gray-200'
+              }`}
+            >
+              <div className={`bg-gradient-to-r ${tier.color} text-white rounded-lg p-3 text-center mb-3`}>
+                <h3 className="font-bold text-lg">{tier.name}</h3>
+                <p className="text-sm opacity-90">Tier</p>
+              </div>
+              <ul className="space-y-2">
+                {tier.benefits.map((benefit, index) => (
+                  <li key={index} className="flex items-start">
+                    <span className="text-green-500 mr-2">✓</span>
+                    <span className="text-sm text-gray-600">{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+              {progressData.currentTier === tier.name && (
+                <div className="mt-3 text-center">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    Your Current Tier
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
