@@ -11,10 +11,12 @@ import {
   onSnapshot, 
   increment,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  limit,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { User, Transaction, SavingsAccount, Loan } from '../types';
+import { User, Transaction, SavingsAccount, Loan, Referral } from '../types';
 
 // Helper function to convert Firestore timestamps to Date objects
 export const convertTimestamps = (data: any): any => {
@@ -57,6 +59,7 @@ export const createUserDocument = async (uid: string, userData: Partial<User>): 
       rewardPoints: userData.rewardPoints || 0,
       totalEarnedInterest: userData.totalEarnedInterest || 0,
       premiumStatus: userData.premiumStatus || false,
+      premiumPlan: userData.premiumPlan || 'basic',
       referralsCount: userData.referralsCount || 0,
       referralEarnings: userData.referralEarnings || 0,
       kycVerified: userData.kycVerified || false
@@ -121,8 +124,8 @@ export const getUserTransactions = (uid: string, callback: (transactions: Transa
     orderBy('timestamp', 'desc')
   );
   
-  return onSnapshot(q, (snapshot) => {
-    const transactions = snapshot.docs.map(doc => ({
+  return onSnapshot(q, (snapshot: any) => {
+    const transactions = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...convertTimestamps(doc.data())
     })) as Transaction[];
@@ -174,8 +177,8 @@ export const getUserSavingsAccounts = (uid: string, callback: (accounts: Savings
     orderBy('startDate', 'desc')
   );
   
-  return onSnapshot(q, (snapshot) => {
-    const accounts = snapshot.docs.map(doc => ({
+  return onSnapshot(q, (snapshot: any) => {
+    const accounts = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...convertTimestamps(doc.data())
     })) as SavingsAccount[];
@@ -231,8 +234,8 @@ export const getUserLoans = (uid: string, callback: (loans: Loan[]) => void) => 
     orderBy('createdAt', 'desc')
   );
   
-  return onSnapshot(q, (snapshot) => {
-    const loans = snapshot.docs.map(doc => ({
+  return onSnapshot(q, (snapshot: any) => {
+    const loans = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...convertTimestamps(doc.data())
     })) as Loan[];
@@ -288,8 +291,8 @@ export const getRevenueRecords = (callback: (records: any[]) => void) => {
     orderBy('timestamp', 'desc')
   );
   
-  return onSnapshot(q, (snapshot) => {
-    const records = snapshot.docs.map(doc => ({
+  return onSnapshot(q, (snapshot: any) => {
+    const records = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...convertTimestamps(doc.data())
     }));
@@ -461,5 +464,91 @@ export const migrateAdminDataFromLocalStorage = async (): Promise<boolean> => {
   } catch (error) {
     console.error('Error migrating admin data:', error);
     return false;
+  }
+};
+
+// Referral functions
+export const generateReferralCode = async (): Promise<string> => {
+  // Generate a random 8-character alphanumeric code
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
+export const createReferral = async (referral: Omit<Referral, 'id'>): Promise<string> => {
+  try {
+    const referralData = {
+      ...referral,
+      createdAt: serverTimestamp(),
+      completedAt: referral.completedAt ? Timestamp.fromDate(referral.completedAt) : null
+    };
+    
+    const docRef = await addDoc(collection(db, 'referrals'), referralData);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating referral:', error);
+    throw error;
+  }
+};
+
+export const updateReferralStatus = async (
+  referralId: string, 
+  status: 'pending' | 'completed' | 'expired', 
+  completedAt?: Date
+): Promise<void> => {
+  try {
+    const updateData: any = { status };
+    
+    if (completedAt) {
+      updateData.completedAt = Timestamp.fromDate(completedAt);
+    }
+    
+    await updateDoc(doc(db, 'referrals', referralId), updateData);
+  } catch (error) {
+    console.error('Error updating referral status:', error);
+    throw error;
+  }
+};
+
+export const getUserReferrals = (userId: string, callback: (referrals: Referral[]) => void) => {
+  const q = query(
+    collection(db, 'referrals'),
+    where('referrerId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+  
+  return onSnapshot(q, (snapshot: any) => {
+    const referrals = snapshot.docs.map((doc: any) => ({
+      id: doc.id,
+      ...convertTimestamps(doc.data())
+    })) as Referral[];
+    
+    callback(referrals);
+  });
+};
+
+export const getReferralByCode = async (referralCode: string): Promise<Referral | null> => {
+  try {
+    const q = query(
+      collection(db, 'referrals'),
+      where('referralCode', '==', referralCode),
+      limit(1)
+    );
+    
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0];
+      return {
+        id: doc.id,
+        ...convertTimestamps(doc.data())
+      } as Referral;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting referral by code:', error);
+    return null;
   }
 };

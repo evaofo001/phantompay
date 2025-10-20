@@ -89,6 +89,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             rewardPoints: 0,
             totalEarnedInterest: 0,
             premiumStatus: false,
+            premiumPlan: 'basic',
             referralsCount: 0,
             referralEarnings: 0,
             kycVerified: false
@@ -195,7 +196,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Add reward points (1 point per KES 100 transferred)
       const rewardPoints = Math.floor(amount / 100);
       if (rewardPoints > 0) {
-        await addRewardPoints(rewardPoints);
+        await addRewardPoints(rewardPoints, 'money transfer');
       }
 
     } catch (error: any) {
@@ -232,7 +233,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Add reward points (1 point per KES 500 deposited)
       const rewardPoints = Math.floor(amount / 500);
       if (rewardPoints > 0) {
-        await addRewardPoints(rewardPoints);
+        await addRewardPoints(rewardPoints, 'deposit');
       }
 
     } catch (error: any) {
@@ -325,7 +326,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Add reward points
       const rewardPoints = Math.floor(amount / 200);
       if (rewardPoints > 0) {
-        await addRewardPoints(rewardPoints);
+        await addRewardPoints(rewardPoints, 'airtime purchase');
       }
 
     } catch (error: any) {
@@ -366,7 +367,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Add reward points
       const rewardPoints = Math.floor(amount / 200);
       if (rewardPoints > 0) {
-        await addRewardPoints(rewardPoints);
+        await addRewardPoints(rewardPoints, 'data purchase');
       }
 
     } catch (error: any) {
@@ -377,12 +378,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const addRewardPoints = async (points: number) => {
+  const addRewardPoints = async (points: number, activity: string = 'Reward points') => {
     if (!currentUser || !user) return;
     
     try {
       const newRewardPoints = (user.rewardPoints || 0) + points;
       await updateUserDocument(currentUser.uid, { rewardPoints: newRewardPoints });
+
+      // Create transaction record for reward activity
+      await addTransaction({
+        uid: currentUser.uid,
+        type: 'reward',
+        amount: Math.abs(points),
+        description: points > 0 
+          ? `Earned ${points} points from ${activity}` 
+          : `Redeemed ${Math.abs(points)} points for ${activity}`,
+        status: 'completed',
+        direction: points > 0 ? '+' : '-'
+      });
 
       // If points are being redeemed (negative), handle the cost
       if (points < 0) {

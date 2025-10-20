@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdmin } from '../contexts/AdminContext';
+import { useWallet } from '../contexts/WalletContext';
+import toast from 'react-hot-toast';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,6 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const { logout, currentUser } = useAuth();
   const { isAdmin } = useAdmin();
+  const { user: walletUser } = useWallet();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
@@ -45,6 +48,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Premium', href: '/premium', icon: Crown },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
+
+  // Get premium tier for badge display
+  const premiumTier = walletUser?.premiumStatus ? walletUser.premiumPlan || 'plus' : 'basic';
+  const showPremiumBadge = walletUser?.premiumStatus && walletUser.premiumPlan && walletUser.premiumPlan !== 'basic';
+  const badgeText = premiumTier === 'vip' ? 'VIP' : premiumTier === 'plus' ? 'PLUS' : '';
+  const badgeColor = premiumTier === 'vip' ? 'bg-gradient-to-r from-yellow-500 to-orange-600' : 'bg-gradient-to-r from-purple-500 to-indigo-600';
 
   // Add admin navigation for admin users
   const adminNavigation = [
@@ -514,8 +523,13 @@ PhantomPay takes your privacy seriously:
               Download App
             </button>
             <div className="px-4 py-2">
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-gray-900 flex items-center">
                 {currentUser?.email || 'User'}
+                {showPremiumBadge && (
+                  <span className={`ml-2 text-xs px-2 py-1 rounded-full text-white ${badgeColor}`}>
+                    {badgeText}
+                  </span>
+                )}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 {isAdmin ? 'Revenue Admin' : 'Premium Account'}
@@ -549,6 +563,11 @@ PhantomPay takes your privacy seriously:
               {isAdmin && (
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
                   Admin
+                </span>
+              )}
+              {showPremiumBadge && (
+                <span className={`text-xs px-2 py-1 rounded-full text-white ${badgeColor}`}>
+                  {badgeText}
                 </span>
               )}
             </div>

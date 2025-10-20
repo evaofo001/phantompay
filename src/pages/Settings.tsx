@@ -32,7 +32,7 @@ import { SUPPORTED_CURRENCIES } from '../utils/currencyUtils';
 import toast from 'react-hot-toast';
 
 const Settings: React.FC = () => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, updatePassword } = useAuth();
   const { user, updateUserPremiumStatus } = useWallet();
   
   // UI State
@@ -40,6 +40,7 @@ const Settings: React.FC = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showAddWithdrawal, setShowAddWithdrawal] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [withdrawalType, setWithdrawalType] = useState<'bank' | 'mobile' | 'card'>('mobile');
   const [currentLanguage, setCurrentLang] = useState(getCurrentLanguage());
   const [currentCurrency, setCurrentCurrency] = useState('KES');
@@ -53,6 +54,13 @@ const Settings: React.FC = () => {
     idNumber: 'ID123456789',
     language: currentLanguage,
     currency: currentCurrency
+  });
+
+  // Password Change Data
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   });
 
   // Withdrawal Methods
@@ -166,8 +174,13 @@ const Settings: React.FC = () => {
   };
 
   const handleChangePassword = () => {
-    // Simulate password change
-    toast.success('Password change email sent to your inbox');
+    setShowChangePassword(true);
+    // Reset password form data
+    setPasswordData({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    });
   };
 
   const handleDeleteAccount = () => {
