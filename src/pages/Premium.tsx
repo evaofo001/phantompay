@@ -180,8 +180,8 @@ const Premium: React.FC = () => {
   const badgeText = user?.premiumPlan === 'vip' ? 'VIP' : user?.premiumPlan === 'plus' ? 'PLUS' : '';
   const badgeColor = user?.premiumPlan === 'vip' ? 'from-yellow-500 to-orange-600' : 'from-purple-500 to-indigo-600';
 
-  // Fee comparison example
-  const exampleAmount = 10000;
+  // Fee comparison example — use user's balance as example amount when available
+  const exampleAmount = Math.max(10000, Math.round(balance || 0));
   const feeComparison = plans.map(plan => {
     let baseFee = 60; // Base fee for 10k transfer
     let discount = 0;

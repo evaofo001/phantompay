@@ -59,12 +59,16 @@ const AIAssistant: React.FC = () => {
     let suggestions: string[] = [];
 
     // Analyze user's financial data
-    const totalSpent = transactions
-      .filter(t => t.direction === '-' && t.type !== 'savings_deposit')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
+    // Ensure transactions array and numeric balances are safe
+    const txs = Array.isArray(transactions) ? transactions : [];
+    const totalSpent = txs
+      .filter(t => t && t.direction === '-' && t.type !== 'savings_deposit')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
     const monthlySpending = totalSpent; // Simplified for demo
-    const savingsRate = savingsBalance > 0 ? (savingsBalance / (balance + savingsBalance)) * 100 : 0;
+    const effectiveBalance = Number(balance) || 0;
+    const effectiveSavings = Number(savingsBalance) || 0;
+    const savingsRate = effectiveBalance + effectiveSavings > 0 ? (effectiveSavings / (effectiveBalance + effectiveSavings)) * 100 : 0;
     const premiumTier = user?.premiumStatus ? (user as any).premiumPlan || 'plus' : 'basic';
 
     if (lowerMessage.includes('spending') || lowerMessage.includes('analyze')) {
