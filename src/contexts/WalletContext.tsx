@@ -73,13 +73,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const initializeUserData = async () => {
       setLoading(true);
       try {
+        console.log('Initializing user data for:', currentUser.uid);
+
         // Try to migrate data from localStorage first
-        await migrateUserDataFromLocalStorage(currentUser.uid);
+        try {
+          await migrateUserDataFromLocalStorage(currentUser.uid);
+        } catch (migrationError) {
+          console.warn('Migration from localStorage failed:', migrationError);
+        }
 
         // Get or create user document
         let userData = await getUserDocument(currentUser.uid);
+        console.log('User data fetched:', userData);
 
         if (!userData) {
+          console.log('Creating new user document...');
           // Create new user document
           const newUserData: Partial<User> = {
             email: currentUser.email || '',
@@ -97,40 +105,62 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
           await createUserDocument(currentUser.uid, newUserData);
           userData = await getUserDocument(currentUser.uid);
+          console.log('New user document created:', userData);
         }
 
         setUser(userData);
 
         // Set up real-time listeners
-        unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
-          setTransactions(transactionsList);
-        });
+        try {
+          unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
+            setTransactions(transactionsList);
+          });
 
-        unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
-          setSavingsAccounts(savingsList);
+          unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
+            setSavingsAccounts(savingsList);
 
-          // Update savings balance
-          const totalSavings = savingsList.reduce((total, account) => {
-            if (account.status === 'active') {
-              const currentValue = calculateCurrentSavingsValue(
-                account.principal,
-                account.startDate,
-                account.lockPeriod,
-                account.annualInterestRate
-              );
-              return total + currentValue.currentValue;
+            // Update savings balance
+            const totalSavings = savingsList.reduce((total, account) => {
+              if (account.status === 'active') {
+                const currentValue = calculateCurrentSavingsValue(
+                  account.principal,
+                  account.startDate,
+                  account.lockPeriod,
+                  account.annualInterestRate
+                );
+                return total + currentValue.currentValue;
+              }
+              return total;
+            }, 0);
+
+            // Update user's savings balance
+            if (userData && totalSavings !== userData.savingsBalance) {
+              updateUserDocument(currentUser.uid, { savingsBalance: totalSavings });
             }
-            return total;
-          }, 0);
-
-          // Update user's savings balance
-          if (userData && totalSavings !== userData.savingsBalance) {
-            updateUserDocument(currentUser.uid, { savingsBalance: totalSavings });
-          }
-        });
-      } catch (error) {
+          });
+        } catch (listenerError) {
+          console.error('Error setting up listeners:', listenerError);
+        }
+      } catch (error: any) {
         console.error('Error initializing user data:', error);
-        toast.error('Failed to load user data');
+        toast.error(`Failed to load user data: ${error.message || 'Unknown error'}`);
+
+        // Set a default user object to prevent blank page
+        setUser({
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          displayName: currentUser.displayName || '',
+          walletBalance: 0,
+          savingsBalance: 0,
+          rewardPoints: 0,
+          totalEarnedInterest: 0,
+          premiumStatus: false,
+          premiumPlan: 'basic',
+          referralsCount: 0,
+          referralEarnings: 0,
+          kycVerified: false,
+          createdAt: new Date()
+        } as User);
       } finally {
         setLoading(false);
       }
