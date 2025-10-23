@@ -23,7 +23,7 @@ The system now supports environment variables for configuration:
 REACT_APP_ADMIN_SECRET_CODE=PHANTOM2024
 
 # Admin email addresses (comma-separated)
-REACT_APP_ADMIN_EMAILS=admin@phantompay.com,superadmin@phantompay.com,revenue@phantompay.com
+REACT_APP_ADMIN_EMAILS=phantompaywallet@gmail.com
 ```
 
 ## Configuration Options
@@ -55,7 +55,7 @@ REACT_APP_ADMIN_EMAILS=admin@phantompay.com,superadmin@phantompay.com,revenue@ph
 
 ### Adding New Admin Users
 1. Update the `REACT_APP_ADMIN_EMAILS` environment variable
-2. Add the email to the comma-separated list
+2. Add the email to the comma-separated list (currently only one admin: phantompaywallet@gmail.com)
 3. Restart the application
 
 ### Changing Admin Secret Code

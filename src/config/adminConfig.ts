@@ -63,9 +63,7 @@ export interface AdminConfig {
 // Default configuration - can be overridden by environment variables or database
 const defaultAdminConfig: AdminConfig = {
   adminEmails: [
-    'admin@phantompay.com',
-    'superadmin@phantompay.com',
-    'revenue@phantompay.com'
+    'phantompaywallet@gmail.com'
   ],
   secretCode: process.env.REACT_APP_ADMIN_SECRET_CODE || 'PHANTOM2024',
   
@@ -142,8 +140,8 @@ export const isAdminEmail = (email: string): boolean => {
 // Function to get admin role based on email
 export const getAdminRole = (email: string): 'super_admin' | 'admin' => {
   const config = getAdminConfig();
-  // Super admin is the first email in the list, or specifically 'superadmin@phantompay.com'
-  return email === 'superadmin@phantompay.com' || email === config.adminEmails[0] ? 'super_admin' : 'admin';
+  // Since we only have one admin email, it's automatically the super admin
+  return config.adminEmails.includes(email) ? 'super_admin' : 'admin';
 };
 
 // Function to validate admin secret code
