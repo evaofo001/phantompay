@@ -32,6 +32,27 @@ const Dashboard: React.FC = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Setting up your wallet data</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if user data is not available
+  if (!user && currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="bg-red-100 p-4 rounded-lg mb-4">
+            <p className="text-red-600 font-medium">Unable to load user data</p>
+            <p className="text-sm text-red-500 mt-2">Please refresh the page or try again</p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Refresh Page
+          </button>
         </div>
       </div>
     );

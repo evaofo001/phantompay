@@ -75,6 +75,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         console.log('Initializing user data for:', currentUser.uid);
 
+        // Set a default user object first to prevent blank page
+        const defaultUser: User = {
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          displayName: currentUser.displayName || '',
+          walletBalance: 0,
+          savingsBalance: 0,
+          rewardPoints: 0,
+          totalEarnedInterest: 0,
+          premiumStatus: false,
+          premiumPlan: 'basic',
+          referralsCount: 0,
+          referralEarnings: 0,
+          kycVerified: false,
+          createdAt: new Date()
+        };
+
+        // Set default user immediately to prevent blank page
+        setUser(defaultUser);
+
         // Try to migrate data from localStorage first
         try {
           await migrateUserDataFromLocalStorage(currentUser.uid);
@@ -108,7 +128,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.log('New user document created:', userData);
         }
 
-        setUser(userData);
+        // Update user data if we successfully fetched it
+        if (userData) {
+          setUser(userData);
+        }
 
         // Set up real-time listeners
         try {
@@ -143,24 +166,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       } catch (error: any) {
         console.error('Error initializing user data:', error);
-        toast.error(`Failed to load user data: ${error.message || 'Unknown error'}`);
+        // Don't show error toast as it might be confusing for users
+        // toast.error(`Failed to load user data: ${error.message || 'Unknown error'}`);
 
-        // Set a default user object to prevent blank page
-        setUser({
-          uid: currentUser.uid,
-          email: currentUser.email || '',
-          displayName: currentUser.displayName || '',
-          walletBalance: 0,
-          savingsBalance: 0,
-          rewardPoints: 0,
-          totalEarnedInterest: 0,
-          premiumStatus: false,
-          premiumPlan: 'basic',
-          referralsCount: 0,
-          referralEarnings: 0,
-          kycVerified: false,
-          createdAt: new Date()
-        } as User);
+        // Ensure we have a user object to prevent blank page
+        if (!user) {
+          setUser({
+            uid: currentUser.uid,
+            email: currentUser.email || '',
+            displayName: currentUser.displayName || '',
+            walletBalance: 0,
+            savingsBalance: 0,
+            rewardPoints: 0,
+            totalEarnedInterest: 0,
+            premiumStatus: false,
+            premiumPlan: 'basic',
+            referralsCount: 0,
+            referralEarnings: 0,
+            kycVerified: false,
+            createdAt: new Date()
+          } as User);
+        }
       } finally {
         setLoading(false);
       }
