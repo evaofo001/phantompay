@@ -10,6 +10,7 @@ import {
 } from '../utils/firestoreHelpers';
 import { doc, setDoc, onSnapshot } from '../config/firebase';
 import { db } from '../config/firebase';
+import { isAdminEmail, getAdminRole, validateAdminSecretCode } from '../config/adminConfig';
 import toast from 'react-hot-toast';
 
 interface AdminContextType {
@@ -35,15 +36,7 @@ export const useAdmin = () => {
   return context;
 };
 
-// Admin email addresses
-const ADMIN_EMAILS = [
-  'admin@phantompay.com',
-  'superadmin@phantompay.com',
-  'revenue@phantompay.com'
-];
-
-// Secret code for admin operations
-const ADMIN_SECRET_CODE = 'PHANTOM2024';
+// Admin configuration is now imported from adminConfig.ts
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
@@ -67,8 +60,8 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const checkAdminStatus = async () => {
       try {
-        // Check if user email is in admin list
-        const userIsAdmin = ADMIN_EMAILS.includes(currentUser.email || '');
+        // Check if user email is in admin list using dynamic configuration
+        const userIsAdmin = isAdminEmail(currentUser.email || '');
         setIsAdmin(userIsAdmin);
 
         if (userIsAdmin) {
@@ -93,7 +86,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const newAdmin: AdminUser = {
         uid: currentUser.uid,
         email: currentUser.email || '',
-        role: currentUser.email === 'superadmin@phantompay.com' ? 'super_admin' : 'admin',
+        role: getAdminRole(currentUser.email || ''),
         permissions: ['view_revenue', 'manage_users', 'view_analytics', 'withdraw_funds', 'transfer_funds'],
         createdAt: new Date()
       };
@@ -215,7 +208,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    if (secretCode !== ADMIN_SECRET_CODE) {
+    if (!validateAdminSecretCode(secretCode)) {
       toast.error('Invalid admin secret code');
       return;
     }
@@ -252,7 +245,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    if (secretCode !== ADMIN_SECRET_CODE) {
+    if (!validateAdminSecretCode(secretCode)) {
       toast.error('Invalid admin secret code');
       return;
     }

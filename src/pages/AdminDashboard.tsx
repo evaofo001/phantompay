@@ -32,6 +32,7 @@ import {
   Building
 } from 'lucide-react';
 import { useAdmin } from '../contexts/AdminContext';
+import { getPlatformStatsConfig, getRevenueTypesConfig, getExpenseTypesConfig } from '../config/adminConfig';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import toast from 'react-hot-toast';
 
@@ -142,21 +143,26 @@ const AdminDashboard: React.FC = () => {
     return acc;
   }, {} as Record<string, number>);
 
-  const revenueTypes = [
-    { id: 'transaction_fee', name: 'Transaction Fees', color: 'from-blue-500 to-blue-600', icon: CreditCard },
-    { id: 'premium_subscription', name: 'Premium Subscriptions', color: 'from-purple-500 to-purple-600', icon: Crown },
-    { id: 'withdrawal_fee', name: 'Withdrawal Fees', color: 'from-red-500 to-red-600', icon: ArrowUpRight },
-    { id: 'loan_interest', name: 'Loan Interest', color: 'from-green-500 to-green-600', icon: Target },
-    { id: 'early_withdrawal_penalty', name: 'Early Withdrawal Penalties', color: 'from-orange-500 to-orange-600', icon: AlertTriangle },
-    { id: 'admin_withdrawal', name: 'Admin Withdrawals', color: 'from-red-700 to-red-800', icon: Minus },
-    { id: 'admin_transfer', name: 'Admin Transfers', color: 'from-blue-700 to-blue-800', icon: Send }
-  ];
+  // Get dynamic configuration for revenue and expense types
+  const platformConfig = getPlatformStatsConfig();
+  const revenueTypesConfig = getRevenueTypesConfig();
+  const expenseTypesConfig = getExpenseTypesConfig();
 
-  const expenseTypes = [
-    { id: 'savings_interest', name: 'Savings Interest', color: 'from-emerald-500 to-emerald-600', icon: TrendingUp },
-    { id: 'reward_points', name: 'Reward Points', color: 'from-yellow-500 to-yellow-600', icon: Zap },
-    { id: 'cashback', name: 'Cashback Payments', color: 'from-orange-500 to-orange-600', icon: ArrowDownRight }
-  ];
+  // Icon mapping for dynamic configuration
+  const iconMap: Record<string, any> = {
+    CreditCard, Crown, ArrowUpRight, Target, AlertTriangle, Minus, Send,
+    TrendingUp, Zap, ArrowDownRight, DollarSign, Users, Activity, BarChart3
+  };
+
+  const revenueTypes = revenueTypesConfig.map(config => ({
+    ...config,
+    icon: iconMap[config.icon] || DollarSign
+  }));
+
+  const expenseTypes = expenseTypesConfig.map(config => ({
+    ...config,
+    icon: iconMap[config.icon] || TrendingUp
+  }));
 
   const handleWithdraw = async () => {
     const amount = parseFloat(withdrawAmount);
@@ -501,21 +507,21 @@ const AdminDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
             <Smartphone className="h-12 w-12 text-green-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-green-900">1,234</p>
+            <p className="text-2xl font-bold text-green-900">{platformConfig.withdrawalDestinations.mobileMoneyAccounts.toLocaleString()}</p>
             <p className="text-sm text-green-700">Mobile Money Accounts</p>
             <p className="text-xs text-green-600 mt-1">M-Pesa, Airtel, MTN</p>
           </div>
 
           <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
             <Building className="h-12 w-12 text-blue-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-blue-900">567</p>
+            <p className="text-2xl font-bold text-blue-900">{platformConfig.withdrawalDestinations.bankAccounts.toLocaleString()}</p>
             <p className="text-sm text-blue-700">Bank Accounts</p>
             <p className="text-xs text-blue-600 mt-1">All major banks</p>
           </div>
 
           <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
             <CreditCard className="h-12 w-12 text-purple-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-purple-900">89</p>
+            <p className="text-2xl font-bold text-purple-900">{platformConfig.withdrawalDestinations.cardAccounts.toLocaleString()}</p>
             <p className="text-sm text-purple-700">Card Accounts</p>
             <p className="text-xs text-purple-600 mt-1">Visa, Mastercard</p>
           </div>
@@ -526,7 +532,7 @@ const AdminDashboard: React.FC = () => {
             <AlertTriangle className="h-5 w-5 text-amber-600 mr-2" />
             <div>
               <p className="font-medium text-amber-900">Pending Verifications</p>
-              <p className="text-sm text-amber-700">23 withdrawal methods awaiting admin verification</p>
+              <p className="text-sm text-amber-700">{platformConfig.withdrawalDestinations.pendingVerifications} withdrawal methods awaiting admin verification</p>
             </div>
           </div>
         </div>

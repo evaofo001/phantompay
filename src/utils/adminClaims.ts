@@ -1,15 +1,9 @@
 import { auth } from '../config/firebase';
+import { isAdminEmail } from '../config/adminConfig';
 
-// Admin email addresses that should have admin claims
-const ADMIN_EMAILS = [
-  'admin@phantompay.com',
-  'superadmin@phantompay.com',
-  'revenue@phantompay.com'
-];
-
-// Function to check if user should have admin claims
+// Function to check if user should have admin claims using dynamic configuration
 export const shouldHaveAdminClaims = (email: string): boolean => {
-  return ADMIN_EMAILS.includes(email);
+  return isAdminEmail(email);
 };
 
 // Function to set admin claims (this would typically be done server-side)
