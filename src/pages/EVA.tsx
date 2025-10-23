@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Brain, Send, User, Bot, TrendingUp, DollarSign, Target, PiggyBank, Crown, Zap } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
+import { evaIntegration, getEVAIntegrationConfig } from '../config/evaIntegration';
 import { format } from 'date-fns';
 
 interface Message {
@@ -12,12 +13,13 @@ interface Message {
   suggestions?: string[];
 }
 
-const AIAssistant: React.FC = () => {
+const EVA: React.FC = () => {
   const { user, balance, savingsBalance, rewardPoints, transactions } = useWallet();
   const { currentUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [evaIntegrationStatus, setEvaIntegrationStatus] = useState<'standalone' | 'integrated' | 'checking'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const formatCurrency = (amount: number) => {
@@ -36,12 +38,41 @@ const AIAssistant: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Initialize EVA integration
+  useEffect(() => {
+    const initializeEVA = async () => {
+      try {
+        const config = getEVAIntegrationConfig();
+        evaIntegration.updateConfig(config);
+        
+        const isIntegrated = await evaIntegration.initializeEVA();
+        setEvaIntegrationStatus(isIntegrated ? 'integrated' : 'standalone');
+        
+        // Send financial context to EVA organism if integrated
+        if (isIntegrated) {
+          await evaIntegration.sendFinancialData({
+            user: user,
+            balance: balance,
+            savingsBalance: savingsBalance,
+            rewardPoints: rewardPoints,
+            transactions: transactions
+          });
+        }
+      } catch (error) {
+        console.error('EVA integration initialization failed:', error);
+        setEvaIntegrationStatus('standalone');
+      }
+    };
+
+    initializeEVA();
+  }, [user, balance, savingsBalance, rewardPoints, transactions]);
+
   // Initialize with welcome message
   useEffect(() => {
     const welcomeMessage: Message = {
       id: '1',
       type: 'ai',
-      content: `Hello ${currentUser?.email?.split('@')[0] || 'there'}! 👋 I'm your AI Financial Coach. I can help you with budgeting, savings goals, investment advice, and analyzing your spending patterns. What would you like to know about your finances today?`,
+      content: `Hello ${currentUser?.email?.split('@')[0] || 'there'}! 👋 I'm EVA, your Personal AI Financial Organism. ${evaIntegrationStatus === 'integrated' ? 'I\'m running with enhanced capabilities from the full EVA organism system!' : 'I\'m running in standalone mode, ready to help with your finances.'} I can help you with budgeting, savings goals, investment advice, and analyzing your spending patterns. What would you like to know about your finances today?`,
       timestamp: new Date(),
       suggestions: [
         'Analyze my spending patterns',
@@ -272,8 +303,21 @@ What specific area would you like help with?`;
         <div className="bg-gradient-to-r from-indigo-500 to-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
           <Brain className="h-8 w-8 text-white" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">🤖 AI Financial Coach</h1>
-        <p className="text-gray-600">Get personalized financial advice powered by AI</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">🧠 EVA - Personal AI Financial Organism</h1>
+        <p className="text-gray-600">Your intelligent financial companion that grows and adapts with you</p>
+        <div className="mt-2">
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+            evaIntegrationStatus === 'integrated' 
+              ? 'bg-green-100 text-green-800' 
+              : evaIntegrationStatus === 'checking'
+              ? 'bg-yellow-100 text-yellow-800'
+              : 'bg-blue-100 text-blue-800'
+          }`}>
+            {evaIntegrationStatus === 'integrated' && '🔗 EVA Organism Connected'}
+            {evaIntegrationStatus === 'checking' && '⏳ Checking EVA Integration...'}
+            {evaIntegrationStatus === 'standalone' && '📱 Standalone Mode'}
+          </span>
+        </div>
       </div>
 
       {/* Financial Overview Cards */}
@@ -328,8 +372,8 @@ What specific area would you like help with?`;
               <Brain className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">AI Financial Coach</h3>
-              <p className="text-sm text-gray-600">Online • Ready to help</p>
+              <h3 className="font-semibold text-gray-900">EVA Financial Organism</h3>
+              <p className="text-sm text-gray-600">Online • Ready to help • Local-first AI</p>
             </div>
           </div>
         </div>
@@ -430,12 +474,13 @@ What specific area would you like help with?`;
       {/* Disclaimer */}
       <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
         <p className="text-sm text-amber-800">
-          <strong>Disclaimer:</strong> This AI assistant provides educational financial guidance based on your PhantomPay data. 
+          <strong>Disclaimer:</strong> EVA provides educational financial guidance based on your PhantomPay data. 
           It's not a substitute for professional financial advice. Always consult with qualified financial advisors for major financial decisions.
+          <br /><strong>Integration Ready:</strong> EVA is prepared for integration with the full EVA organism system for enhanced local-first AI capabilities.
         </p>
       </div>
     </div>
   );
 };
 
-export default AIAssistant;
+export default EVA;

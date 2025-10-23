@@ -66,7 +66,7 @@ const Dashboard: React.FC = () => {
     { name: 'Loans', href: '/loans', icon: Target, color: 'from-green-500 to-green-600', description: 'Get loans' },
     { name: 'Savings', href: '/savings', icon: PiggyBank, color: 'from-emerald-500 to-emerald-600', description: 'Save money' },
     { name: 'Rewards', href: '/rewards', icon: Gift, color: 'from-purple-500 to-purple-600', description: 'Earn points' },
-    { name: 'AI Coach', href: '/ai-assistant', icon: Brain, color: 'from-indigo-500 to-purple-600', description: 'Get advice' },
+    { name: 'EVA', href: '/ai-assistant', icon: Brain, color: 'from-indigo-500 to-purple-600', description: 'AI Financial Organism' },
   ];
 
   const getTransactionIcon = (type: string, direction: string) => {

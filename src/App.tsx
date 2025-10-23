@@ -24,7 +24,7 @@ import Premium from './pages/Premium';
 import Withdraw from './pages/Withdraw';
 import Loans from './pages/Loans';
 import Savings from './pages/Savings';
-import AIAssistant from './pages/AIAssistant';
+import EVA from './pages/EVA';
 import EmailLinkHandler from './components/EmailLinkHandler';
 
 function App() {
@@ -102,7 +102,7 @@ function App() {
                             } />
                             <Route path="/ai-assistant" element={
                               <Layout>
-                                <AIAssistant />
+                                <EVA />
                               </Layout>
                             } />
                             <Route path="/settings" element={
