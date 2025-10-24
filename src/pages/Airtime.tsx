@@ -1,23 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Phone, Smartphone, Wifi, ArrowRight } from 'lucide-react';
+import { Phone, Smartphone, Wifi, ArrowRight, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import { mobileMoneyAPI } from '../services/mobileMoneyAPI';
+import { getAirtimeProducts, getDataBundles, getProviderByPhoneNumber, validatePhoneNumber } from '../utils/airtimeUtils';
 import toast from 'react-hot-toast';
 
 interface AirtimeForm {
   phoneNumber: string;
   amount: number;
+  provider: string;
 }
 
 interface DataForm {
   phoneNumber: string;
   bundle: string;
   amount: number;
+  provider: string;
 }
 
 const Airtime: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'airtime' | 'data'>('airtime');
   const { balance, buyAirtime, buyData, loading } = useWallet();
+  
+  const [airtimeProducts, setAirtimeProducts] = useState<any[]>([]);
+  const [dataBundles, setDataBundles] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [phoneValidation, setPhoneValidation] = useState<{ isValid: boolean; error?: string }>({ isValid: true });
   
   const airtimeForm = useForm<AirtimeForm>();
   const dataForm = useForm<DataForm>();
@@ -30,37 +41,120 @@ const Airtime: React.FC = () => {
     }).format(amount);
   };
 
-  const airtimeAmounts = [50, 100, 200, 500, 1000, 2000];
-  
-  const dataBundles = [
-    { name: '100MB - 1 Day', amount: 20 },
-    { name: '500MB - 3 Days', amount: 50 },
-    { name: '1GB - 7 Days', amount: 100 },
-    { name: '2GB - 14 Days', amount: 200 },
-    { name: '5GB - 30 Days', amount: 500 },
-    { name: '10GB - 30 Days', amount: 1000 },
-  ];
+  // Initialize providers and products
+  useEffect(() => {
+    const initializeProviders = async () => {
+      try {
+        const activeProviders = mobileMoneyAPI.getActiveProviders();
+        setProviders(activeProviders);
+        
+        // Load airtime products
+        const products = await getAirtimeProducts();
+        setAirtimeProducts(products);
+        
+        // Load data bundles
+        const bundles = await getDataBundles();
+        setDataBundles(bundles);
+      } catch (error) {
+        console.error('Failed to initialize providers:', error);
+        toast.error('Failed to load airtime providers');
+      }
+    };
+
+    initializeProviders();
+  }, []);
+
+  // Auto-detect provider when phone number changes
+  const handlePhoneNumberChange = (phoneNumber: string) => {
+    const validation = validatePhoneNumber(phoneNumber);
+    setPhoneValidation(validation);
+    
+    if (validation.isValid) {
+      const provider = getProviderByPhoneNumber(phoneNumber);
+      if (provider) {
+        setSelectedProvider(provider.id);
+        airtimeForm.setValue('provider', provider.id);
+        dataForm.setValue('provider', provider.id);
+      }
+    }
+  };
 
   const onSubmitAirtime = async (data: AirtimeForm) => {
+    if (!phoneValidation.isValid) {
+      toast.error(phoneValidation.error || 'Invalid phone number');
+      return;
+    }
+
+    setIsProcessing(true);
     try {
-      await buyAirtime(data.amount, data.phoneNumber);
-      toast.success(`Airtime of ${formatCurrency(data.amount)} sent successfully!`);
-      airtimeForm.reset();
+      // Validate provider
+      const providerValidation = mobileMoneyAPI.validatePhoneNumber(data.phoneNumber, data.provider);
+      if (!providerValidation.isValid) {
+        toast.error(providerValidation.error || 'Invalid phone number for selected provider');
+        return;
+      }
+
+      // Purchase airtime through mobile money API
+      const response = await mobileMoneyAPI.purchaseAirtime({
+        phoneNumber: data.phoneNumber,
+        amount: data.amount,
+        currency: 'KES',
+        provider: data.provider,
+        reference: `airtime_${Date.now()}`
+      });
+
+      if (response.success) {
+        // Update wallet balance locally
+        await buyAirtime(data.amount, data.phoneNumber);
+        toast.success(`Airtime of ${formatCurrency(data.amount)} sent successfully!`);
+        airtimeForm.reset();
+      } else {
+        toast.error(response.message || 'Failed to buy airtime');
+      }
     } catch (error: any) {
+      console.error('Airtime purchase error:', error);
       toast.error(error.message || 'Failed to buy airtime');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const onSubmitData = async (data: DataForm) => {
+    if (!phoneValidation.isValid) {
+      toast.error(phoneValidation.error || 'Invalid phone number');
+      return;
+    }
+
+    setIsProcessing(true);
     try {
-      const selectedBundle = dataBundles.find(b => b.name === data.bundle);
-      if (!selectedBundle) return;
-      
-      await buyData(selectedBundle.amount, data.phoneNumber, data.bundle);
-      toast.success(`Data bundle purchased successfully!`);
-      dataForm.reset();
+      // Validate provider
+      const providerValidation = mobileMoneyAPI.validatePhoneNumber(data.phoneNumber, data.provider);
+      if (!providerValidation.isValid) {
+        toast.error(providerValidation.error || 'Invalid phone number for selected provider');
+        return;
+      }
+
+      // Purchase data bundle through mobile money API
+      const response = await mobileMoneyAPI.purchaseDataBundle({
+        phoneNumber: data.phoneNumber,
+        bundleId: data.bundle,
+        provider: data.provider,
+        reference: `data_${Date.now()}`
+      });
+
+      if (response.success) {
+        // Update wallet balance locally
+        await buyData(data.amount, data.phoneNumber, data.bundle);
+        toast.success(`Data bundle ${data.bundle} sent successfully!`);
+        dataForm.reset();
+      } else {
+        toast.error(response.message || 'Failed to buy data bundle');
+      }
     } catch (error: any) {
+      console.error('Data bundle purchase error:', error);
       toast.error(error.message || 'Failed to buy data bundle');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -123,16 +217,52 @@ const Airtime: React.FC = () => {
                   <input
                     {...airtimeForm.register('phoneNumber', { 
                       required: 'Phone number is required',
-                      pattern: {
-                        value: /^(\+254|0)[17]\d{8}$/,
-                        message: 'Please enter a valid Kenyan phone number'
-                      }
+                      onChange: (e) => handlePhoneNumberChange(e.target.value)
                     })}
                     type="tel"
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors"
+                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors ${
+                      phoneValidation.isValid ? 'border-gray-300' : 'border-red-300'
+                    }`}
                     placeholder="+254712345678 or 0712345678"
                   />
+                  {phoneValidation.isValid && airtimeForm.watch('phoneNumber') && (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    </div>
+                  )}
+                  {!phoneValidation.isValid && airtimeForm.watch('phoneNumber') && (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                    </div>
+                  )}
                 </div>
+                {!phoneValidation.isValid && (
+                  <p className="mt-1 text-sm text-red-600">{phoneValidation.error}</p>
+                )}
+                {selectedProvider && (
+                  <p className="mt-1 text-sm text-green-600">
+                    ✓ Auto-detected: {providers.find(p => p.id === selectedProvider)?.name}
+                  </p>
+                )}
+              </div>
+
+              {/* Provider Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mobile Money Provider
+                </label>
+                <select
+                  {...airtimeForm.register('provider', { required: 'Provider is required' })}
+                  className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors"
+                >
+                  <option value="">Select Provider</option>
+                  {providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
                 {airtimeForm.formState.errors.phoneNumber && (
                   <p className="mt-1 text-sm text-red-600">
                     {airtimeForm.formState.errors.phoneNumber.message}
@@ -184,13 +314,13 @@ const Airtime: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isProcessing || !phoneValidation.isValid}
                 className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 px-6 rounded-xl font-medium hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center"
               >
-                {loading ? (
+                {loading || isProcessing ? (
                   <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Processing...
+                    <Loader className="animate-spin h-5 w-5 mr-2" />
+                    {isProcessing ? 'Processing with Provider...' : 'Processing...'}
                   </div>
                 ) : (
                   <>

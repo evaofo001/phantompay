@@ -29,6 +29,24 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { SUPPORTED_LANGUAGES, getCurrentLanguage, setCurrentLanguage, translate } from '../utils/languageUtils';
 import { SUPPORTED_CURRENCIES } from '../utils/currencyUtils';
+import { 
+  updateUserProfile, 
+  addWithdrawalMethod, 
+  removeWithdrawalMethod, 
+  setDefaultWithdrawalMethod,
+  updateNotificationPreferences,
+  updateSecuritySettings,
+  uploadProfilePicture,
+  getKYCStatus,
+  submitKYCDocument,
+  validatePersonalInfo,
+  validateWithdrawalMethod,
+  getDefaultProfile,
+  type UserProfile,
+  type WithdrawalMethod,
+  type NotificationPreferences,
+  type KYCStatus
+} from '../utils/profileUtils';
 import toast from 'react-hot-toast';
 
 const Settings: React.FC = () => {
@@ -41,9 +59,11 @@ const Settings: React.FC = () => {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showAddWithdrawal, setShowAddWithdrawal] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showKYCUpload, setShowKYCUpload] = useState(false);
   const [withdrawalType, setWithdrawalType] = useState<'bank' | 'mobile' | 'card'>('mobile');
   const [currentLanguage, setCurrentLang] = useState(getCurrentLanguage());
   const [currentCurrency, setCurrentCurrency] = useState('KES');
+  const [kycStatus, setKycStatus] = useState<KYCStatus>({ status: 'not_submitted', documents: {} });
   
   // Profile Data
   const [profileData, setProfileData] = useState({
@@ -160,13 +180,42 @@ const Settings: React.FC = () => {
     setEditingField(field);
   };
 
-  const handleProfileSave = (field: string, value: string) => {
-    setProfileData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    setEditingField(null);
-    toast.success('Profile updated successfully');
+  const handleProfileSave = async (field: string, value: string) => {
+    try {
+      // Validate the field if it's personal info
+      if (['fullName', 'phoneNumber', 'dateOfBirth', 'address', 'idNumber'].includes(field)) {
+        const validationErrors = validatePersonalInfo({
+          ...profileData,
+          [field]: value
+        });
+        
+        if (validationErrors.length > 0) {
+          toast.error(validationErrors[0]);
+          return;
+        }
+      }
+
+      // Update local state
+      setProfileData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+
+      // Update in database
+      if (currentUser) {
+        await updateUserProfile(currentUser.uid, {
+          personalInfo: {
+            ...profileData,
+            [field]: value
+          }
+        });
+      }
+
+      setEditingField(null);
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      toast.error('Failed to update profile');
+    }
   };
 
   const handleProfileCancel = () => {
@@ -258,6 +307,123 @@ const Settings: React.FC = () => {
     toast.success('Currency updated successfully');
   };
 
+  // KYC Management Functions
+  const handleKYCUpload = async (documentType: keyof KYCStatus['documents'], file: File) => {
+    try {
+      if (currentUser) {
+        await submitKYCDocument(currentUser.uid, documentType, file);
+        setKycStatus(prev => ({
+          ...prev,
+          documents: {
+            ...prev.documents,
+            [documentType]: URL.createObjectURL(file)
+          }
+        }));
+        toast.success('Document uploaded successfully');
+      }
+    } catch (error) {
+      toast.error('Failed to upload document');
+    }
+  };
+
+  const handleKYCStatusCheck = async () => {
+    try {
+      const status = await getKYCStatus();
+      setKycStatus(status);
+    } catch (error) {
+      toast.error('Failed to fetch KYC status');
+    }
+  };
+
+  // Enhanced withdrawal method management
+  const handleAddWithdrawalMethodEnhanced = async () => {
+    try {
+      if (!newWithdrawalMethod.name) {
+        toast.error('Please enter a name for this method');
+        return;
+      }
+
+      const methodData = {
+        type: withdrawalType,
+        name: newWithdrawalMethod.name,
+        details: withdrawalType === 'mobile' ? {
+          phoneNumber: newWithdrawalMethod.phoneNumber,
+          provider: newWithdrawalMethod.provider,
+          accountName: newWithdrawalMethod.accountHolderName
+        } : withdrawalType === 'bank' ? {
+          bankName: newWithdrawalMethod.bankName,
+          accountNumber: newWithdrawalMethod.accountNumber,
+          accountHolderName: newWithdrawalMethod.accountHolderName
+        } : {
+          cardType: newWithdrawalMethod.cardType,
+          cardNumber: newWithdrawalMethod.cardNumber,
+          expiryDate: newWithdrawalMethod.expiryDate,
+          cardHolderName: newWithdrawalMethod.cardHolderName
+        },
+        isDefault: withdrawalMethods.length === 0,
+        verified: false
+      };
+
+      // Validate withdrawal method
+      const validationErrors = validateWithdrawalMethod(methodData);
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors[0]);
+        return;
+      }
+
+      // Add to database
+      if (currentUser) {
+        const methodId = await addWithdrawalMethod(currentUser.uid, methodData);
+        
+        // Update local state
+        const newMethod = {
+          id: methodId,
+          ...methodData,
+          createdAt: new Date()
+        };
+        setWithdrawalMethods([...withdrawalMethods, newMethod]);
+      }
+
+      setShowAddWithdrawal(false);
+      setNewWithdrawalMethod({
+        name: '', phoneNumber: '', provider: 'mpesa', bankName: '', accountNumber: '', 
+        accountHolderName: '', cardType: 'visa', cardNumber: '', expiryDate: '', cardHolderName: ''
+      });
+      toast.success('Withdrawal method added successfully');
+    } catch (error) {
+      toast.error('Failed to add withdrawal method');
+    }
+  };
+
+  const handleDeleteWithdrawalMethodEnhanced = async (id: string) => {
+    try {
+      if (window.confirm('Are you sure you want to delete this withdrawal method?')) {
+        if (currentUser) {
+          await removeWithdrawalMethod(currentUser.uid, id);
+        }
+        setWithdrawalMethods(withdrawalMethods.filter(method => method.id !== id));
+        toast.success('Withdrawal method deleted');
+      }
+    } catch (error) {
+      toast.error('Failed to delete withdrawal method');
+    }
+  };
+
+  const handleSetDefaultWithdrawalEnhanced = async (id: string) => {
+    try {
+      if (currentUser) {
+        await setDefaultWithdrawalMethod(currentUser.uid, id);
+      }
+      setWithdrawalMethods(withdrawalMethods.map(method => ({
+        ...method,
+        isDefault: method.id === id
+      })));
+      toast.success('Default withdrawal method updated');
+    } catch (error) {
+      toast.error('Failed to update default withdrawal method');
+    }
+  };
+
   const EditableField = ({ field, value, type = 'text', placeholder }: any) => {
     const [tempValue, setTempValue] = useState(value);
     
@@ -331,6 +497,94 @@ const Settings: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* KYC Status */}
+      <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <Shield className="h-6 w-6 text-gray-600 mr-3" />
+            <h2 className="text-xl font-semibold text-gray-900">Identity Verification (KYC)</h2>
+          </div>
+          <button
+            onClick={handleKYCStatusCheck}
+            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+          >
+            Refresh Status
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-3 border-b border-gray-100">
+            <div>
+              <p className="font-medium text-gray-900">Verification Status</p>
+              <p className="text-sm text-gray-600">
+                {kycStatus.status === 'verified' && 'Your identity has been verified'}
+                {kycStatus.status === 'pending' && 'Your documents are under review'}
+                {kycStatus.status === 'rejected' && 'Your documents were rejected'}
+                {kycStatus.status === 'not_submitted' && 'Please submit your documents'}
+              </p>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              kycStatus.status === 'verified' ? 'bg-green-100 text-green-800' :
+              kycStatus.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+              kycStatus.status === 'rejected' ? 'bg-red-100 text-red-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {kycStatus.status.toUpperCase()}
+            </span>
+          </div>
+
+          {kycStatus.status === 'rejected' && kycStatus.rejectionReason && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800">
+                <strong>Rejection Reason:</strong> {kycStatus.rejectionReason}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { key: 'idFront', label: 'ID Front', icon: '🆔' },
+              { key: 'idBack', label: 'ID Back', icon: '🆔' },
+              { key: 'selfie', label: 'Selfie', icon: '📸' },
+              { key: 'proofOfAddress', label: 'Proof of Address', icon: '🏠' }
+            ].map((doc) => (
+              <div key={doc.key} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl">{doc.icon}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    kycStatus.documents[doc.key as keyof typeof kycStatus.documents] 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {kycStatus.documents[doc.key as keyof typeof kycStatus.documents] ? 'Uploaded' : 'Missing'}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-gray-900">{doc.label}</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleKYCUpload(doc.key as keyof KYCStatus['documents'], file);
+                    }
+                  }}
+                  className="mt-2 text-xs text-gray-600"
+                />
+              </div>
+            ))}
+          </div>
+
+          {kycStatus.status === 'not_submitted' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                <strong>Complete KYC:</strong> Upload all required documents to verify your identity and unlock full account features.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -456,7 +710,7 @@ const Settings: React.FC = () => {
                     </span>
                   )}
                   <button
-                    onClick={() => handleDeleteWithdrawalMethod(method.id)}
+                    onClick={() => handleDeleteWithdrawalMethodEnhanced(method.id)}
                     className="text-red-600 hover:text-red-700 p-1"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -487,7 +741,7 @@ const Settings: React.FC = () => {
 
               {!method.isDefault && (
                 <button
-                  onClick={() => handleSetDefaultWithdrawal(method.id)}
+                  onClick={() => handleSetDefaultWithdrawalEnhanced(method.id)}
                   className="mt-3 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
                 >
                   Set as Default
@@ -717,7 +971,7 @@ const Settings: React.FC = () => {
 
             <div className="flex space-x-3 mt-6">
               <button
-                onClick={handleAddWithdrawalMethod}
+                onClick={handleAddWithdrawalMethodEnhanced}
                 className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Add Method

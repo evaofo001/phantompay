@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { Crown, Check, Star, Zap, Shield, Headphones, TrendingUp, Gift, Brain, Lock, Trophy, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Crown, Check, Star, Zap, Shield, Headphones, TrendingUp, Gift, Brain, Lock, Trophy, Users, CreditCard, Calendar, AlertCircle } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import { useAuth } from '../contexts/AuthContext';
+import { subscriptionService, type PaymentMethod, type SubscriptionResponse } from '../services/subscriptionService';
+import { getPremiumPlans, createSubscription, getActiveSubscription } from '../utils/premiumUtils';
 import toast from 'react-hot-toast';
 
 interface PremiumPlan {
@@ -26,8 +29,47 @@ interface PremiumPlan {
 
 const Premium: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<string>('plus');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionResponse | null>(null);
+  const [promoCode, setPromoCode] = useState<string>('');
+  const [promoDiscount, setPromoDiscount] = useState<number>(0);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [plans, setPlans] = useState<any[]>([]);
+  
   const { user, balance, updateUserPremiumStatus, addTransaction, updateUserBalance, loading } = useWallet();
+  const { currentUser } = useAuth();
   const [subscribing, setSubscribing] = useState(false);
+
+  // Initialize data
+  useEffect(() => {
+    const initializeData = async () => {
+      if (!currentUser) return;
+
+      try {
+        // Load premium plans
+        const premiumPlans = await getPremiumPlans();
+        setPlans(premiumPlans);
+
+        // Load payment methods
+        const methods = await subscriptionService.getPaymentMethods(currentUser.uid);
+        setPaymentMethods(methods);
+        if (methods.length > 0) {
+          const defaultMethod = methods.find(m => m.isDefault) || methods[0];
+          setSelectedPaymentMethod(defaultMethod.id);
+        }
+
+        // Load active subscription
+        const subscription = await subscriptionService.getActiveSubscription(currentUser.uid);
+        setActiveSubscription(subscription);
+      } catch (error) {
+        console.error('Failed to initialize premium data:', error);
+        toast.error('Failed to load premium data');
+      }
+    };
+
+    initializeData();
+  }, [currentUser]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -126,50 +168,124 @@ const Premium: React.FC = () => {
     }
   ];
 
+  // Validate promo code
+  const handleValidatePromoCode = async () => {
+    if (!promoCode.trim()) return;
+
+    try {
+      const result = await subscriptionService.validatePromoCode(promoCode);
+      if (result.valid) {
+        setPromoDiscount(result.discount || 0);
+        toast.success(result.message);
+      } else {
+        setPromoDiscount(0);
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error('Failed to validate promo code');
+    }
+  };
+
+  // Calculate final price with discount
+  const calculateFinalPrice = (planPrice: number) => {
+    if (promoDiscount > 0) {
+      return Math.max(0, planPrice - (planPrice * promoDiscount / 100));
+    }
+    return planPrice;
+  };
+
   const handleSubscribe = async (planId: string) => {
+    if (!user || !currentUser) {
+      toast.error('Please log in to subscribe');
+      return;
+    }
+
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) {
+      toast.error('Plan not found');
+      return;
+    }
+
+    if (plan.price === 0) {
+      // Free plan - just update status
+      try {
+        await updateUserPremiumStatus(true, planId);
+        toast.success(`Successfully subscribed to ${plan.name}!`);
+      } catch (error) {
+        toast.error('Failed to activate free plan');
+      }
+      return;
+    }
+
+    if (paymentMethods.length === 0) {
+      toast.error('Please add a payment method first');
+      return;
+    }
+
     setSubscribing(true);
     try {
-      const plan = plans.find(p => p.id === planId);
-      if (!plan) return;
+      // Create subscription
+      const subscriptionResult = await subscriptionService.createSubscription(currentUser.uid, {
+        planId,
+        paymentMethodId: selectedPaymentMethod,
+        autoRenew: true,
+        promoCode: promoCode || undefined
+      });
 
-      if (plan.price > balance) {
-        toast.error('Insufficient balance for subscription');
-        return;
-      }
-
-      // Simulate subscription process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Update premium status
-      const premiumData = {
-        premiumStatus: planId !== 'basic',
-        premiumPlan: planId,
-        premiumExpiry: planId !== 'basic' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined
-      };
-
-      await updateUserPremiumStatus(premiumData);
-      
-      // Deduct subscription fee from balance and add transaction
-      if (plan.price > 0) {
-        // Update user balance
-        const newBalance = (user?.walletBalance || 0) - plan.price;
-        await updateUserBalance(newBalance);
+      if (subscriptionResult.success) {
+        // Update user premium status
+        await updateUserPremiumStatus(true, planId);
         
-        await addTransaction({
-          uid: user?.uid || '',
-          type: 'subscription',
-          amount: plan.price,
-          description: `${plan.name} subscription`,
-          status: 'completed',
-          direction: '-'
-        });
+        // Deduct subscription fee from balance
+        const finalPrice = calculateFinalPrice(plan.price);
+        if (finalPrice > 0) {
+          await updateUserBalance(balance - finalPrice);
+          
+          // Add transaction record
+          await addTransaction({
+            uid: user?.uid || '',
+            type: 'subscription',
+            amount: finalPrice,
+            description: `${plan.name} subscription`,
+            status: 'completed',
+            direction: '-'
+          });
+        }
+        
+        toast.success(`Successfully subscribed to ${plan.name}! 🎉`);
+        setShowPaymentModal(false);
+        
+        // Refresh subscription data
+        const updatedSubscription = await subscriptionService.getActiveSubscription(currentUser.uid);
+        setActiveSubscription(updatedSubscription);
+      } else {
+        toast.error(subscriptionResult.message || 'Subscription failed');
       }
-      
-      toast.success(`Successfully subscribed to ${plan.name}! 🎉`);
     } catch (error: any) {
+      console.error('Subscription error:', error);
       toast.error(error.message || 'Subscription failed');
     } finally {
       setSubscribing(false);
+    }
+  };
+
+  // Handle subscription cancellation
+  const handleCancelSubscription = async () => {
+    if (!activeSubscription?.subscriptionId) return;
+
+    if (window.confirm('Are you sure you want to cancel your subscription?')) {
+      try {
+        const result = await subscriptionService.cancelSubscription(activeSubscription.subscriptionId);
+        if (result.success) {
+          await updateUserPremiumStatus(false, 'basic');
+          setActiveSubscription(null);
+          toast.success('Subscription canceled successfully');
+        } else {
+          toast.error(result.message || 'Failed to cancel subscription');
+        }
+      } catch (error) {
+        toast.error('Failed to cancel subscription');
+      }
     }
   };
 

@@ -3,12 +3,16 @@ import QRCode from 'react-qr-code';
 import { QrCode, Scan, Copy, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import QRScanner from '../components/QRScanner';
+import { QRScanResult } from '../utils/qrPayUtils';
 
 const QRPay: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'generate' | 'scan'>('generate');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannedData, setScannedData] = useState<QRScanResult | null>(null);
   const { currentUser } = useAuth();
 
   const formatCurrency = (amount: number) => {
@@ -49,8 +53,28 @@ const QRPay: React.FC = () => {
   };
 
   const handleScanQR = () => {
-    // In a real app, this would open camera for QR scanning
-    toast.info('QR Scanner would open here in a real app');
+    setShowScanner(true);
+  };
+
+  const handleScanSuccess = (result: QRScanResult) => {
+    setScannedData(result);
+    setShowScanner(false);
+    
+    if (result.isValid && result.data) {
+      toast.success('QR code scanned successfully!');
+      // Here you would navigate to payment confirmation
+      console.log('Scanned QR data:', result.data);
+    } else {
+      toast.error(result.error || 'Invalid QR code');
+    }
+  };
+
+  const handleScanError = (error: string) => {
+    toast.error(error);
+  };
+
+  const handleCloseScanner = () => {
+    setShowScanner(false);
   };
 
   return (
@@ -225,6 +249,15 @@ const QRPay: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* QR Scanner Modal */}
+      {showScanner && (
+        <QRScanner
+          onScanSuccess={handleScanSuccess}
+          onScanError={handleScanError}
+          onClose={handleCloseScanner}
+        />
+      )}
     </div>
   );
 };
