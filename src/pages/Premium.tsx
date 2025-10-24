@@ -79,7 +79,7 @@ const Premium: React.FC = () => {
     }).format(amount);
   };
 
-  const plans: PremiumPlan[] = [
+  const defaultPlans: PremiumPlan[] = [
     {
       id: 'basic',
       name: 'PhantomPay Basic',

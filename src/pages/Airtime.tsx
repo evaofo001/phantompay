@@ -263,12 +263,13 @@ const Airtime: React.FC = () => {
                   ))}
                 </select>
               </div>
-                {airtimeForm.formState.errors.phoneNumber && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {airtimeForm.formState.errors.phoneNumber.message}
-                  </p>
-                )}
-              </div>
+
+              {/* Error message for phone number */}
+              {airtimeForm.formState.errors.phoneNumber && (
+                <p className="mt-1 text-sm text-red-600">
+                  {airtimeForm.formState.errors.phoneNumber.message}
+                </p>
+              )}
 
               {/* Quick Amount Selection */}
               <div>

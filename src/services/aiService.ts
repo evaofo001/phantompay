@@ -212,7 +212,7 @@ class AIService {
       response,
       suggestions: [
         'How much should I save monthly?',
-        'What's the best savings term?',
+        "What's the best savings term?",
         'Should I upgrade for higher interest?',
         'Help me set savings goals'
       ],
@@ -267,7 +267,7 @@ class AIService {
       suggestions: [
         'Help me create a budget',
         'How can I reduce expenses?',
-        'What's the 50/30/20 rule?',
+        "What's the 50/30/20 rule?",
         'Show me spending trends'
       ],
       confidence: 0.85,
