@@ -6,6 +6,9 @@ import { subscriptionService, type PaymentMethod, type SubscriptionResponse } fr
 import { getPremiumPlans, createSubscription, getActiveSubscription } from '../utils/premiumUtils';
 import toast from 'react-hot-toast';
 
+import { User } from '../types';
+import { PaymentMethod, SubscriptionResponse } from '../types';
+
 interface PremiumPlan {
   id: string;
   name: string;
@@ -37,7 +40,7 @@ const Premium: React.FC = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [plans, setPlans] = useState<any[]>([]);
   
-  const { user, balance, updateUserPremiumStatus, addTransaction, updateUserBalance, loading } = useWallet();
+  const { user, balance, updateUserPremiumStatus, updateUserBalance, loading } = useWallet();
   const { currentUser } = useAuth();
   const [subscribing, setSubscribing] = useState(false);
 
@@ -234,22 +237,22 @@ const Premium: React.FC = () => {
 
       if (subscriptionResult.success) {
         // Update user premium status
-        await updateUserPremiumStatus(true, planId);
-        
-        // Deduct subscription fee from balance
+          await updateUserPremiumStatus(planId);        // Deduct subscription fee from balance
         const finalPrice = calculateFinalPrice(plan.price);
         if (finalPrice > 0) {
           await updateUserBalance(balance - finalPrice);
           
-          // Add transaction record
-          await addTransaction({
-            uid: user?.uid || '',
+          // Record transaction
+          const transaction: Transaction = {
+            uid: user.uid,
             type: 'subscription',
             amount: finalPrice,
             description: `${plan.name} subscription`,
             status: 'completed',
             direction: '-'
-          });
+          };
+          
+          await subscriptionService.recordTransaction(transaction);
         }
         
         toast.success(`Successfully subscribed to ${plan.name}! 🎉`);
