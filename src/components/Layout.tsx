@@ -18,11 +18,14 @@ import {
   Plus,
   Download,
   Smartphone,
-  Building
+  Building,
+  Wifi,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { useWallet } from '../contexts/WalletContext';
+import AppDownload from './AppDownload';
 import toast from 'react-hot-toast';
 
 interface LayoutProps {
@@ -31,6 +34,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showAppDownload, setShowAppDownload] = useState(false);
   const location = useLocation();
   const { logout, currentUser } = useAuth();
   const { isAdmin } = useAdmin();
@@ -41,6 +45,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Transfer', href: '/transfer', icon: Send },
     { name: 'Deposit', href: '/deposit', icon: Plus },
     { name: 'Withdraw', href: '/withdraw', icon: Minus },
+    { name: 'Airtime', href: '/airtime', icon: Smartphone },
+    { name: 'Data', href: '/data', icon: Wifi },
+    { name: 'QR Pay', href: '/qr-pay', icon: CreditCard },
     { name: 'Loans', href: '/loans', icon: Target },
     { name: 'Savings', href: '/savings', icon: PiggyBank },
     { name: 'Transactions', href: '/transactions', icon: History },
@@ -71,6 +78,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const handleDownloadApp = () => {
+    setShowAppDownload(true);
+  };
+
+  const oldHandleDownloadApp = () => {
     // Create a comprehensive app package for download
     const createAppPackage = () => {
       // PWA Manifest
@@ -580,6 +591,11 @@ PhantomPay takes your privacy seriously:
           {children}
         </main>
       </div>
+
+      {/* App Download Modal */}
+      {showAppDownload && (
+        <AppDownload onClose={() => setShowAppDownload(false)} />
+      )}
     </div>
   );
 };

@@ -37,7 +37,7 @@ interface CustomizableDashboardProps {
 
 export const CustomizableDashboard: React.FC<CustomizableDashboardProps> = ({ userId }) => {
   const { } = useAuth();
-  const { user } = useWallet();
+  const { user, loading } = useWallet();
   
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
@@ -45,6 +45,19 @@ export const CustomizableDashboard: React.FC<CustomizableDashboardProps> = ({ us
   const [financialHealth, setFinancialHealth] = useState<unknown>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showAddWidget, setShowAddWidget] = useState(false);
+
+  // Show loading state while user data is being fetched
+  if (loading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Setting up your wallet data</p>
+        </div>
+      </div>
+    );
+  }
 
   // Available widget types
   const availableWidgets: Omit<DashboardWidget, 'id' | 'data' | 'position' | 'lastUpdated'>[] = [

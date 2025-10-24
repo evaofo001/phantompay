@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { SUPPORTED_LANGUAGES, getCurrentLanguage, setCurrentLanguage, translate } from '../utils/languageUtils';
 import { SUPPORTED_CURRENCIES } from '../utils/currencyUtils';
 import { 
@@ -52,6 +53,7 @@ import toast from 'react-hot-toast';
 const Settings: React.FC = () => {
   const { currentUser, logout, updatePassword } = useAuth();
   const { user, updateUserPremiumStatus } = useWallet();
+  const { theme, setTheme, actualTheme } = useTheme();
   
   // UI State
   const [darkMode, setDarkMode] = useState(false);
@@ -1201,21 +1203,38 @@ const Settings: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center py-3 border-b border-gray-100">
             <div>
-              <p className="font-medium text-gray-900">Dark Mode</p>
-              <p className="text-sm text-gray-600">Switch between light and dark themes</p>
+              <p className="font-medium text-gray-900">Theme</p>
+              <p className="text-sm text-gray-600">Choose your preferred theme</p>
             </div>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                darkMode ? 'bg-purple-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  darkMode ? 'translate-x-6' : 'translate-x-1'
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setTheme('light')}
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'light' ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
                 }`}
-              />
-            </button>
+                title="Light Mode"
+              >
+                <Sun className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'dark' ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="Dark Mode"
+              >
+                <Moon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setTheme('system')}
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'system' ? 'bg-purple-100 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                title="System Default"
+              >
+                <SettingsIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-between items-center py-3 border-b border-gray-100">

@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="256" fill="url(#gradient1)"/>
+  
+  <!-- Inner Circle -->
+  <circle cx="256" cy="256" r="200" fill="white" opacity="0.1"/>
+  
+  <!-- Wallet Icon -->
+  <g transform="translate(156, 156)">
+    <!-- Wallet Body -->
+    <rect x="0" y="40" width="200" height="120" rx="20" ry="20" fill="white"/>
+    
+    <!-- Wallet Fold -->
+    <rect x="0" y="40" width="200" height="60" rx="20" ry="20" fill="url(#gradient2)"/>
+    
+    <!-- Wallet Clip -->
+    <rect x="80" y="20" width="40" height="20" rx="10" ry="10" fill="white"/>
+    
+    <!-- Money Symbol -->
+    <text x="100" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="url(#gradient2)">₿</text>
+    
+    <!-- Sparkle Effects -->
+    <circle cx="50" cy="50" r="3" fill="white" opacity="0.8"/>
+    <circle cx="150" cy="30" r="2" fill="white" opacity="0.6"/>
+    <circle cx="180" cy="60" r="2.5" fill="white" opacity="0.7"/>
+    <circle cx="30" cy="100" r="2" fill="white" opacity="0.5"/>
+    <circle cx="170" cy="100" r="3" fill="white" opacity="0.8"/>
+  </g>
+  
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>

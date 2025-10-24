@@ -54,8 +54,7 @@ const Withdraw: React.FC = () => {
     try {
       if (!feeBreakdown) return;
       
-      const totalDeduction = data.amount + feeBreakdown.totalFee;
-      if (totalDeduction > balance) {
+      if (feeBreakdown.totalAmount > balance) {
         toast.error('Insufficient balance including fees');
         return;
       }
@@ -249,7 +248,7 @@ const Withdraw: React.FC = () => {
                     </div>
                     <div className="flex justify-between border-t border-amber-200 pt-2">
                       <span className="text-amber-700">Total Deducted:</span>
-                      <span className="font-bold text-amber-900">{formatCurrency(watchedAmount + feeBreakdown.totalFee)}</span>
+                      <span className="font-bold text-amber-900">{formatCurrency(feeBreakdown.totalAmount)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-amber-700">You will receive:</span>

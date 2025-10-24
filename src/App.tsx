@@ -7,6 +7,7 @@ import { AdminProvider } from './contexts/AdminContext';
 import { LoanProvider } from './contexts/LoanContext';
 import { ReferralProvider } from './contexts/ReferralContext';
 import { AchievementsProvider } from './contexts/AchievementsContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Layout from './components/Layout';
@@ -22,6 +23,8 @@ import AchievementsPage from './pages/AchievementsPage';
 import Settings from './pages/Settings';
 import Premium from './pages/Premium';
 import Withdraw from './pages/Withdraw';
+import Airtime from './pages/Airtime';
+import QRPay from './pages/QRPay';
 import Loans from './pages/Loans';
 import Savings from './pages/Savings';
 import EVA from './pages/EVA';
@@ -29,9 +32,10 @@ import EmailLinkHandler from './components/EmailLinkHandler';
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    <ThemeProvider>
+      <AuthProvider>
+        <Router>
+          <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/email-link" element={<EmailLinkHandler />} />
@@ -68,6 +72,26 @@ function App() {
                             <Route path="/deposit" element={
                               <Layout>
                                 <Deposit />
+                              </Layout>
+                            } />
+                            <Route path="/withdraw" element={
+                              <Layout>
+                                <Withdraw />
+                              </Layout>
+                            } />
+                            <Route path="/airtime" element={
+                              <Layout>
+                                <Airtime />
+                              </Layout>
+                            } />
+                            <Route path="/data" element={
+                              <Layout>
+                                <Airtime />
+                              </Layout>
+                            } />
+                            <Route path="/qr-pay" element={
+                              <Layout>
+                                <QRPay />
                               </Layout>
                             } />
                             <Route path="/transactions" element={
@@ -142,6 +166,7 @@ function App() {
         </div>
       </Router>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

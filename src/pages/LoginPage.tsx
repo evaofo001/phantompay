@@ -120,11 +120,18 @@ const LoginPage: React.FC = () => {
         return;
       }
 
-      await login(otpEmail, otpPassword);
-      toast.success('Successfully logged in!');
+      // Check if this is a login or registration flow
+      if (isLogin) {
+        await login(otpEmail, otpPassword);
+        toast.success('Successfully logged in!');
+      } else {
+        await register(otpEmail, otpPassword);
+        toast.success('Account created successfully! Welcome to PhantomPay! 🎉');
+      }
+      
       setShowOTPVerification(false);
     } catch (error: any) {
-      toast.error(error.message || 'Login failed');
+      toast.error(error.message || (isLogin ? 'Login failed' : 'Registration failed'));
     } finally {
       setLoading(false);
     }
@@ -133,14 +140,24 @@ const LoginPage: React.FC = () => {
   const onRegisterSubmit = async (data: RegisterForm) => {
     setLoading(true);
     try {
-      await register(data.email, data.password);
-      toast.success('Account created successfully! Welcome to PhantomPay! 🎉');
+      // Generate and send OTP for registration
+      const otp = generateOTP();
+      storeOTP(data.email, otp);
+      await sendOTPEmail(data.email, otp);
+
+      setOtpEmail(data.email);
+      setOtpPassword(data.password);
+      setShowOTPVerification(true);
+      setOtpExpiryTime(getOTPExpiryTime(data.email));
+
+      toast.success(`OTP sent to ${data.email}. Please verify your email to complete registration.`);
     } catch (error: any) {
-      toast.error(error.message || 'Registration failed');
+      toast.error(error.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleGoogleLogin = async () => {
     setLoading(true);

@@ -383,7 +383,7 @@ const Transfer: React.FC = () => {
                   </div>
                   <div className="flex justify-between border-t border-blue-200 pt-1">
                     <span className="text-blue-700 font-medium">Total:</span>
-                    <span className="font-bold text-blue-900">{formatCurrency(watchedAmount + feeEstimate.totalFee)}</span>
+                    <span className="font-bold text-blue-900">{formatCurrency(feeEstimate.totalAmount)}</span>
                   </div>
                 </div>
               </div>
@@ -432,7 +432,7 @@ const Transfer: React.FC = () => {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={!watchedAmount || (feeEstimate && watchedAmount + feeEstimate.totalFee > balance)}
+          disabled={!watchedAmount || (feeEstimate && feeEstimate.totalAmount > balance)}
           className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl font-medium hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center"
         >
           Continue

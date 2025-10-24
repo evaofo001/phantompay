@@ -35,7 +35,7 @@ interface WalletContextType {
   withdrawFromSavings: (savingsId: string, isEarly: boolean) => Promise<void>;
   updateUserBalance: (newBalance: number) => Promise<void>;
   updateUserPremiumStatus: (premiumData: any) => Promise<void>;
-  getFeeEstimate: (amount: number, type: string) => { totalFee: number; premiumDiscount: number };
+  getFeeEstimate: (amount: number, type: string) => { totalFee: number; premiumDiscount: number; totalAmount: number; netAmount: number };
   loading: boolean;
 }
 
@@ -212,9 +212,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const premiumTier = getUserPremiumTier();
       const feeBreakdown = getFeeBreakdown(amount, 'p2p', premiumTier);
-      const totalDeduction = amount + feeBreakdown.totalFee;
 
-      if (totalDeduction > user.walletBalance) {
+      if (feeBreakdown.totalAmount > user.walletBalance) {
         throw new Error('Insufficient balance including fees');
       }
 
@@ -235,7 +234,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       // Update user balance
-      const newBalance = user.walletBalance - totalDeduction;
+      const newBalance = user.walletBalance - feeBreakdown.totalAmount;
       await updateUserDocument(currentUser.uid, { walletBalance: newBalance });
 
       // Collect fee revenue
@@ -307,9 +306,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const premiumTier = getUserPremiumTier();
       const feeBreakdown = getFeeBreakdown(amount, 'withdrawal', premiumTier);
-      const totalDeduction = amount + feeBreakdown.totalFee;
 
-      if (totalDeduction > user.walletBalance) {
+      if (feeBreakdown.totalAmount > user.walletBalance) {
         throw new Error('Insufficient balance including fees');
       }
 
@@ -330,7 +328,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       // Update user balance
-      const newBalance = user.walletBalance - totalDeduction;
+      const newBalance = user.walletBalance - feeBreakdown.totalAmount;
       await updateUserDocument(currentUser.uid, { walletBalance: newBalance });
 
       // Collect fee revenue
@@ -641,7 +639,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     return {
       totalFee: feeBreakdown.totalFee,
-      premiumDiscount: feeBreakdown.premiumDiscount || 0
+      premiumDiscount: feeBreakdown.premiumDiscount || 0,
+      totalAmount: feeBreakdown.totalAmount,
+      netAmount: feeBreakdown.netAmount
     };
   };
 

@@ -3,6 +3,7 @@ import { Brain, Send, User, Bot, TrendingUp, DollarSign, Target, PiggyBank, Crow
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 import { evaIntegration, getEVAIntegrationConfig } from '../config/evaIntegration';
+import { aiService } from '../services/aiService';
 import { format } from 'date-fns';
 
 interface Message {
@@ -277,12 +278,45 @@ What specific area would you like help with?`;
     setInputMessage('');
     setIsTyping(true);
 
-    // Simulate AI thinking time
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(inputMessage);
-      setMessages(prev => [...prev, aiResponse]);
+    try {
+      // Use the dynamic AI service
+      const aiResponse = await aiService.generateResponse(
+        inputMessage,
+        user || { uid: '', email: '', displayName: '', walletBalance: 0, savingsBalance: 0, rewardPoints: 0, totalEarnedInterest: 0, premiumStatus: false, premiumPlan: 'basic', referralsCount: 0, referralEarnings: 0, kycVerified: false, createdAt: new Date() },
+        transactions || [],
+        { balance, savingsBalance, rewardPoints }
+      );
+
+      const aiMessage: Message = {
+        id: Date.now().toString(),
+        type: 'ai',
+        content: aiResponse.response,
+        timestamp: new Date(),
+        suggestions: aiResponse.suggestions
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('AI service error:', error);
+      
+      // Fallback to simple response
+      const fallbackMessage: Message = {
+        id: Date.now().toString(),
+        type: 'ai',
+        content: `🤖 I'm here to help with your financial questions! I can assist with budgeting, savings, loans, and premium features. What would you like to know?`,
+        timestamp: new Date(),
+        suggestions: [
+          'Analyze my spending patterns',
+          'Help me create a savings plan',
+          'What are my investment options?',
+          'Should I upgrade to premium?'
+        ]
+      };
+
+      setMessages(prev => [...prev, fallbackMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleSuggestionClick = (suggestion: string) => {

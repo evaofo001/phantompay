@@ -104,9 +104,10 @@ export const getOTPExpiryTime = (email: string): number | null => {
 export const sendOTPEmail = async (email: string, otp: string): Promise<void> => {
   console.log(`[OTP] Sending OTP ${otp} to ${email}`);
 
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  console.log(`
+  // In development, we'll use console logging
+  // In production, this should integrate with an email service like SendGrid, AWS SES, etc.
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`
     ====================================
     PhantomPay OTP Verification
     ====================================
@@ -114,5 +115,47 @@ export const sendOTPEmail = async (email: string, otp: string): Promise<void> =>
     OTP Code: ${otp}
     Valid for: ${OTP_EXPIRY_MINUTES} minutes
     ====================================
-  `);
+    `);
+    
+    // Simulate email sending delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return;
+  }
+
+  // Production email sending would go here
+  // Example with SendGrid:
+  /*
+  try {
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    
+    const msg = {
+      to: email,
+      from: 'noreply@phantompay.app',
+      subject: 'PhantomPay OTP Verification',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #7c3aed;">PhantomPay OTP Verification</h2>
+          <p>Your OTP code is: <strong style="font-size: 24px; color: #7c3aed;">${otp}</strong></p>
+          <p>This code is valid for ${OTP_EXPIRY_MINUTES} minutes.</p>
+          <p>If you didn't request this code, please ignore this email.</p>
+        </div>
+      `
+    };
+    
+    await sgMail.send(msg);
+  } catch (error) {
+    console.error('Failed to send OTP email:', error);
+    throw new Error('Failed to send OTP email');
+  }
+  */
+  
+  // For now, we'll use a mock email service
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // In a real implementation, you would:
+  // 1. Set up SendGrid, AWS SES, or another email service
+  // 2. Configure SMTP settings
+  // 3. Create email templates
+  // 4. Handle email delivery status
 };
