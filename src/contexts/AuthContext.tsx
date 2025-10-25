@@ -17,15 +17,11 @@ import {
 } from '../config/firebase';
 import { sendEmailLink, completeEmailLinkSignIn, isEmailLinkSignIn } from '../utils/emailLinkAuth';
 
-// Mock User interface to match Firebase User
-interface MockUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-}
+// Use real Firebase User type
+import type { User } from 'firebase/auth';
 
 interface AuthContextType {
-  currentUser: MockUser | null;
+  currentUser: User | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -54,21 +50,22 @@ export const useAuth = () => {
 
 // Mock authentication for development
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<MockUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Use Firebase onAuthStateChanged to manage user session
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (user) {
-        // User is signed in
-        setCurrentUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName
-        });
-        // For demo purposes, also store in localStorage to simulate persistence across browser restarts
-        localStorage.setItem('phantompay_user', JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName }));
+        // User is signed in - use the real Firebase User object
+        setCurrentUser(user);
+        // Store user data in localStorage for persistence
+        localStorage.setItem('phantompay_user', JSON.stringify({ 
+          uid: user.uid, 
+          email: user.email, 
+          displayName: user.displayName,
+          emailVerified: user.emailVerified 
+        }));
       } else {
         // User is signed out
         setCurrentUser(null);

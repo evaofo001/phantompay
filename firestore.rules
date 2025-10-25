@@ -1,6 +1,83 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Users can read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Admin users can access admin collections
+    match /admin/{document=**} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.email in ['phantompaywallet@gmail.com'];
+    }
+    
+    // Public collections (read-only for authenticated users)
+    match /public/{document=**} {
+      allow read: if request.auth != null;
+    }
+    
+    // Transactions - users can read/write their own transactions
+    match /transactions/{transactionId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Wallets - users can read/write their own wallet
+    match /wallets/{walletId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Savings - users can read/write their own savings
+    match /savings/{savingId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Loans - users can read/write their own loans
+    match /loans/{loanId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Referrals - users can read/write their own referrals
+    match /referrals/{referralId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Achievements - users can read/write their own achievements
+    match /achievements/{achievementId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.auth.token.email in ['phantompaywallet@gmail.com']);
+    }
+    
+    // Admin wallet - only admin can access
+    match /adminWallet/{document=**} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.email in ['phantompaywallet@gmail.com'];
+    }
+    
+    // Revenue records - only admin can access
+    match /revenueRecords/{recordId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.email in ['phantompaywallet@gmail.com'];
+    }
+    
+    // Platform stats - only admin can access
+    match /platformStats/{statId} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.email in ['phantompaywallet@gmail.com'];
+    }
+    
+    // Default deny for any other collections
     match /{document=**} {
       allow read, write: if false;
     }

@@ -62,6 +62,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         // Check if user email is in admin list using dynamic configuration
         const userIsAdmin = isAdminEmail(currentUser.email || '');
+        console.log('Checking admin status for:', currentUser.email, 'Is admin:', userIsAdmin);
         setIsAdmin(userIsAdmin);
 
         if (userIsAdmin) {

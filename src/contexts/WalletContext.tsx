@@ -73,7 +73,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const initializeUserData = async () => {
       setLoading(true);
       try {
-        console.log('Initializing user data for:', currentUser.uid);
+        console.log('🔍 Initializing user data for:', currentUser.uid);
 
         // Set a default user object first to prevent blank page
         const defaultUser: User = {
@@ -93,6 +93,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
 
         // Set default user immediately to prevent blank page
+        console.log('✅ Setting default user:', defaultUser);
         setUser(defaultUser);
 
         // Try to migrate data from localStorage first
@@ -103,43 +104,63 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         // Get or create user document
-        let userData = await getUserDocument(currentUser.uid);
-        console.log('User data fetched:', userData);
+        let userData: User | null = null;
+        try {
+          userData = await getUserDocument(currentUser.uid);
+          console.log('✅ User data fetched:', userData);
+        } catch (error) {
+          console.error('❌ Error fetching user document:', error);
+          console.log('🔄 Using default user due to fetch error');
+          userData = defaultUser;
+        }
 
         if (!userData) {
-          console.log('Creating new user document...');
-          // Create new user document
-          const newUserData: Partial<User> = {
-            email: currentUser.email || '',
-            displayName: currentUser.displayName || '',
-            walletBalance: 0,
-            savingsBalance: 0,
-            rewardPoints: 0,
-            totalEarnedInterest: 0,
-            premiumStatus: false,
-            premiumPlan: 'basic',
-            referralsCount: 0,
-            referralEarnings: 0,
-            kycVerified: false
-          };
+          console.log('📝 Creating new user document...');
+          try {
+            // Create new user document
+            const newUserData: Partial<User> = {
+              email: currentUser.email || '',
+              displayName: currentUser.displayName || '',
+              walletBalance: 0,
+              savingsBalance: 0,
+              rewardPoints: 0,
+              totalEarnedInterest: 0,
+              premiumStatus: false,
+              premiumPlan: 'basic',
+              referralsCount: 0,
+              referralEarnings: 0,
+              kycVerified: false
+            };
 
-          await createUserDocument(currentUser.uid, newUserData);
-          userData = await getUserDocument(currentUser.uid);
-          console.log('New user document created:', userData);
+            await createUserDocument(currentUser.uid, newUserData);
+            userData = await getUserDocument(currentUser.uid);
+            console.log('✅ New user document created:', userData);
+          } catch (createError) {
+            console.error('❌ Error creating user document:', createError);
+            console.log('🔄 Using default user due to creation error');
+            userData = defaultUser;
+          }
         }
 
         // Update user data if we successfully fetched it
         if (userData) {
+          console.log('✅ Setting user data:', userData);
           setUser(userData);
+        } else {
+          console.log('⚠️ No user data available, using default');
+          setUser(defaultUser);
         }
 
         // Set up real-time listeners
         try {
+          console.log('🔄 Setting up real-time listeners...');
           unsubscribeTransactions = getUserTransactions(currentUser.uid, (transactionsList) => {
+            console.log('📊 Transactions updated:', transactionsList.length);
             setTransactions(transactionsList);
           });
 
           unsubscribeSavings = getUserSavingsAccounts(currentUser.uid, (savingsList) => {
+            console.log('💰 Savings updated:', savingsList.length);
             setSavingsAccounts(savingsList);
 
             // Update savings balance
@@ -162,16 +183,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           });
         } catch (listenerError) {
-          console.error('Error setting up listeners:', listenerError);
+          console.error('❌ Error setting up listeners:', listenerError);
+          console.log('🔄 Continuing without real-time listeners');
         }
       } catch (error: any) {
-        console.error('Error initializing user data:', error);
+        console.error('❌ Error initializing user data:', error);
+        console.log('🔄 Setting fallback user to prevent blank page');
         // Don't show error toast as it might be confusing for users
         // toast.error(`Failed to load user data: ${error.message || 'Unknown error'}`);
 
         // Ensure we have a user object to prevent blank page
         if (!user) {
-          setUser({
+          const fallbackUser: User = {
             uid: currentUser.uid,
             email: currentUser.email || '',
             displayName: currentUser.displayName || '',
@@ -185,7 +208,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             referralEarnings: 0,
             kycVerified: false,
             createdAt: new Date()
-          } as User);
+          };
+          console.log('✅ Setting fallback user:', fallbackUser);
+          setUser(fallbackUser);
         }
       } finally {
         setLoading(false);

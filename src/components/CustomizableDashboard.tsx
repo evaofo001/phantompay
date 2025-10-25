@@ -108,6 +108,12 @@ export const CustomizableDashboard: React.FC<CustomizableDashboardProps> = ({ us
       title: 'Financial Goals',
       isVisible: true,
       isCustomizable: true
+    },
+    {
+      type: 'airtime',
+      title: 'Airtime & Data',
+      isVisible: true,
+      isCustomizable: true
     }
   ];
 
@@ -436,6 +442,53 @@ export const CustomizableDashboard: React.FC<CustomizableDashboardProps> = ({ us
               )}
             </div>
             <RealTimeInsights userId={userId} />
+          </div>
+        );
+
+      case 'airtime':
+        return (
+          <div className={commonClasses}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center mr-2">
+                  <span className="text-orange-600 text-sm">📱</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Airtime & Data</h3>
+              </div>
+              {isEditing && (
+                <button
+                  onClick={() => handleRemoveWidget(widget.id)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <a
+                  href="/airtime"
+                  className="bg-orange-50 hover:bg-orange-100 rounded-lg p-3 text-center transition-colors"
+                >
+                  <div className="text-orange-600 text-lg mb-1">📞</div>
+                  <p className="text-sm font-medium text-orange-800">Airtime</p>
+                  <p className="text-xs text-orange-600">Buy airtime</p>
+                </a>
+                <a
+                  href="/data"
+                  className="bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 text-center transition-colors"
+                >
+                  <div className="text-indigo-600 text-lg mb-1">📶</div>
+                  <p className="text-sm font-medium text-indigo-800">Data</p>
+                  <p className="text-xs text-indigo-600">Buy data bundle</p>
+                </a>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2">
+                <p className="text-xs text-gray-600 text-center">
+                  Quick access to mobile services
+                </p>
+              </div>
+            </div>
           </div>
         );
 

@@ -51,57 +51,91 @@ const AppDownload: React.FC<AppDownloadProps> = ({ onClose }) => {
     setSelectedPlatform(platform);
 
     try {
-      // Use the real installer system
-      let installer;
-      switch (platform) {
-        case 'android':
-          installer = androidInstaller;
-          break;
-        case 'windows':
-          installer = windowsInstaller;
-          break;
-        case 'linux':
-          installer = linuxInstaller;
-          break;
-        case 'macos':
-          installer = macosInstaller;
-          break;
-        default:
-          throw new Error(`Unsupported platform: ${platform}`);
-      }
-
-      // Download the installer
-      await installer.downloadInstaller(platform);
-
-      const platformData = platforms.find(p => p.id === platform);
-      if (platformData) {
-        toast.success(`${platformData.name} installer downloaded successfully! 🎉`);
+      if (platform === 'android' || platform === 'ios') {
+        // For mobile, show PWA installation instructions
+        toast.success('📱 Installing PhantomPay as a Progressive Web App...', {
+          duration: 5000,
+        });
         
-        // Show installation instructions
+        // Show PWA installation instructions
         setTimeout(() => {
-          showInstallationInstructions(platform);
+          showPWAInstallationInstructions(platform);
+        }, 1000);
+        
+        // Try to trigger PWA install prompt
+        await triggerPWAInstall();
+        
+      } else {
+        // For desktop platforms, redirect to GitHub releases or provide PWA instructions
+        toast.success('🖥️ Desktop app installation instructions...', {
+          duration: 5000,
+        });
+        
+        setTimeout(() => {
+          showDesktopInstallationInstructions(platform);
         }, 1000);
       }
 
     } catch (error) {
       console.error('Download error:', error);
-      toast.error('Failed to download installer. Please try again.');
+      toast.error('Failed to install app. Please try again.');
     } finally {
       setDownloading(false);
       setSelectedPlatform(null);
     }
   };
 
-  const showInstallationInstructions = (platform: string) => {
+  const triggerPWAInstall = async () => {
+    // Check if PWA can be installed
+    if ('serviceWorker' in navigator && 'BeforeInstallPromptEvent' in window) {
+      const deferredPrompt = (window as any).deferredPrompt;
+      if (deferredPrompt) {
+        try {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log(`User response to the install prompt: ${outcome}`);
+          
+          if (outcome === 'accepted') {
+            toast.success('🎉 PhantomPay installed successfully!', {
+              duration: 8000,
+            });
+          } else {
+            toast.info('💡 You can install PhantomPay later from your browser menu', {
+              duration: 8000,
+            });
+          }
+        } catch (error) {
+          console.error('PWA install prompt error:', error);
+        }
+      }
+    } else {
+      // Fallback instructions
+      toast.info('💡 To install PhantomPay: Use your browser menu "Add to Home Screen" or "Install App"', {
+        duration: 8000,
+      });
+    }
+  };
+
+  const showPWAInstallationInstructions = (platform: string) => {
     const instructions = {
-      android: 'Install the APK file on your Android device. You may need to enable "Install from unknown sources" in your device settings.',
-      windows: 'Run the EXE installer as administrator and follow the installation wizard.',
-      linux: 'Install the DEB package using: sudo dpkg -i phantompay-installer.deb',
-      macos: 'Open the DMG file and drag PhantomPay to your Applications folder.'
+      android: '📱 Android: Open Chrome menu → "Add to Home Screen" or "Install App"',
+      ios: '🍎 iOS: Tap Share button → "Add to Home Screen"',
     };
 
     toast.success(instructions[platform as keyof typeof instructions], {
-      duration: 8000,
+      duration: 10000,
+    });
+  };
+
+  const showDesktopInstallationInstructions = (platform: string) => {
+    const instructions = {
+      windows: '🖥️ Windows: Use Chrome/Edge → Menu → "Install PhantomPay" or visit our website for desktop app',
+      linux: '🐧 Linux: Use Chrome/Firefox → Menu → "Install PhantomPay" or visit our website for desktop app',
+      macos: '🍎 macOS: Use Chrome/Safari → Menu → "Install PhantomPay" or visit our website for desktop app',
+    };
+
+    toast.success(instructions[platform as keyof typeof instructions], {
+      duration: 10000,
     });
   };
 

@@ -104,58 +104,81 @@ export const getOTPExpiryTime = (email: string): number | null => {
 export const sendOTPEmail = async (email: string, otp: string): Promise<void> => {
   console.log(`[OTP] Sending OTP ${otp} to ${email}`);
 
-  // In development, we'll use console logging
-  // In production, this should integrate with an email service like SendGrid, AWS SES, etc.
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`
-    ====================================
-    PhantomPay OTP Verification
-    ====================================
-    Email: ${email}
-    OTP Code: ${otp}
-    Valid for: ${OTP_EXPIRY_MINUTES} minutes
-    ====================================
-    `);
-    
-    // Simulate email sending delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return;
+  // Try to use SendGrid if API key is available
+  const sendGridApiKey = process.env.REACT_APP_SENDGRID_API_KEY;
+  
+  if (sendGridApiKey && sendGridApiKey !== 'your_sendgrid_api_key_here') {
+    try {
+      const sgMail = require('@sendgrid/mail');
+      sgMail.setApiKey(sendGridApiKey);
+      
+      const msg = {
+        to: email,
+        from: process.env.REACT_APP_FROM_EMAIL || 'noreply@phantompay.app',
+        subject: 'PhantomPay OTP Verification',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">💰 PhantomPay</h1>
+              <p style="color: white; margin: 10px 0 0; opacity: 0.9;">Digital Wallet</p>
+            </div>
+            
+            <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+              <h2 style="color: #7c3aed; margin-top: 0;">🔐 OTP Verification</h2>
+              
+              <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                Your verification code is:
+              </p>
+              
+              <div style="background: #f8f9ff; border: 2px solid #7c3aed; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+                <span style="font-size: 32px; font-weight: bold; color: #7c3aed; letter-spacing: 4px;">${otp}</span>
+              </div>
+              
+              <p style="font-size: 14px; color: #666; margin: 20px 0;">
+                ⏰ This code is valid for <strong>${OTP_EXPIRY_MINUTES} minutes</strong>
+              </p>
+              
+              <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0; font-size: 14px; color: #856404;">
+                  ⚠️ <strong>Security Notice:</strong> If you didn't request this code, please ignore this email and consider changing your password.
+                </p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                <p style="font-size: 12px; color: #999; margin: 0;">
+                  This email was sent by PhantomPay Digital Wallet System
+                </p>
+              </div>
+            </div>
+          </div>
+        `
+      };
+      
+      await sgMail.send(msg);
+      console.log(`✅ OTP email sent successfully to ${email}`);
+      return;
+    } catch (error) {
+      console.error('❌ Failed to send OTP email via SendGrid:', error);
+      // Fall back to console logging
+    }
   }
 
-  // Production email sending would go here
-  // Example with SendGrid:
-  /*
-  try {
-    const sgMail = require('@sendgrid/mail');
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    
-    const msg = {
-      to: email,
-      from: 'noreply@phantompay.app',
-      subject: 'PhantomPay OTP Verification',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #7c3aed;">PhantomPay OTP Verification</h2>
-          <p>Your OTP code is: <strong style="font-size: 24px; color: #7c3aed;">${otp}</strong></p>
-          <p>This code is valid for ${OTP_EXPIRY_MINUTES} minutes.</p>
-          <p>If you didn't request this code, please ignore this email.</p>
-        </div>
-      `
-    };
-    
-    await sgMail.send(msg);
-  } catch (error) {
-    console.error('Failed to send OTP email:', error);
-    throw new Error('Failed to send OTP email');
-  }
-  */
+  // Fallback: Console logging for development or when SendGrid fails
+  console.log(`
+    ====================================
+    📧 PhantomPay OTP Verification
+    ====================================
+    📧 Email: ${email}
+    🔐 OTP Code: ${otp}
+    ⏰ Valid for: ${OTP_EXPIRY_MINUTES} minutes
+    ====================================
+    💡 To enable real email sending:
+    1. Get a SendGrid API key
+    2. Set REACT_APP_SENDGRID_API_KEY in your .env file
+    3. Verify your sender email in SendGrid
+    ====================================
+  `);
   
-  // For now, we'll use a mock email service
+  // Simulate email sending delay
   await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // In a real implementation, you would:
-  // 1. Set up SendGrid, AWS SES, or another email service
-  // 2. Configure SMTP settings
-  // 3. Create email templates
-  // 4. Handle email delivery status
 };

@@ -2,7 +2,7 @@
 
 export interface DashboardWidget {
   id: string;
-  type: 'balance' | 'transactions' | 'savings' | 'loans' | 'achievements' | 'quick_actions' | 'insights' | 'goals';
+  type: 'balance' | 'transactions' | 'savings' | 'loans' | 'achievements' | 'quick_actions' | 'insights' | 'goals' | 'airtime';
   title: string;
   data: Record<string, unknown>;
   position: { x: number; y: number; w: number; h: number };
@@ -21,7 +21,7 @@ export interface QuickAction {
   isEnabled: boolean;
   frequency: number; // how often user uses this action
   lastUsed?: Date;
-  category: 'transfer' | 'deposit' | 'withdraw' | 'savings' | 'loans' | 'utilities' | 'premium';
+  category: 'transfer' | 'deposit' | 'withdraw' | 'savings' | 'loans' | 'utilities' | 'premium' | 'airtime' | 'data';
 }
 
 export interface DashboardInsight {
@@ -127,7 +127,18 @@ export const getPersonalizedQuickActions = async (): Promise<QuickAction[]> => {
       description: 'Buy airtime',
       isEnabled: true,
       frequency: 0.7,
-      category: 'utilities'
+      category: 'airtime'
+    },
+    {
+      id: 'data',
+      name: 'Data',
+      href: '/data',
+      icon: 'Wifi',
+      color: 'from-indigo-500 to-indigo-600',
+      description: 'Buy data bundle',
+      isEnabled: true,
+      frequency: 0.6,
+      category: 'data'
     },
     {
       id: 'qr_pay',
@@ -410,7 +421,17 @@ export const getDefaultDashboardLayout = (): DashboardWidget[] => {
       type: 'insights',
       title: 'Financial Insights',
       data: {},
-      position: { x: 0, y: 6, w: 12, h: 2 },
+      position: { x: 0, y: 6, w: 8, h: 2 },
+      isVisible: true,
+      isCustomizable: true,
+      lastUpdated: new Date()
+    },
+    {
+      id: 'airtime_data',
+      type: 'airtime',
+      title: 'Airtime & Data',
+      data: {},
+      position: { x: 8, y: 6, w: 4, h: 2 },
       isVisible: true,
       isCustomizable: true,
       lastUpdated: new Date()
