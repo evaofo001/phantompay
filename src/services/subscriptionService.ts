@@ -1,6 +1,8 @@
 // Subscription Processing Service
 // Handles premium plan subscriptions, payments, and management
 
+import { Transaction } from '../types/transaction';
+
 export interface PaymentMethod {
   id: string;
   type: 'card' | 'mobile_money' | 'bank_transfer';
@@ -21,7 +23,7 @@ export interface SubscriptionRequest {
 export interface SubscriptionResponse {
   success: boolean;
   subscriptionId?: string;
-  status?: 'active' | 'pending' | 'failed';
+  status?: 'active' | 'pending' | 'failed' | 'canceled';
   message: string;
   nextBillingDate?: Date;
   amount?: number;
@@ -410,6 +412,24 @@ class SubscriptionService {
     } catch (error) {
       console.error('Get subscription analytics error:', error);
       return null;
+    }
+  }
+
+  async recordTransaction(transaction: Transaction): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/transactions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(transaction)
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Record transaction error:', error);
+      return false;
     }
   }
 }

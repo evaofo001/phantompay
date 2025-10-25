@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Crown, Check, Star, Zap, Shield, Headphones, TrendingUp, Gift, Brain, Lock, Trophy, Users, CreditCard, Calendar, AlertCircle } from 'lucide-react';
+import { Crown, Check, Star, Zap, Shield, TrendingUp, Brain, Trophy } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 import { subscriptionService, type PaymentMethod, type SubscriptionResponse } from '../services/subscriptionService';
-import { getPremiumPlans, createSubscription, getActiveSubscription } from '../utils/premiumUtils';
+import { getPremiumPlans } from '../utils/premiumUtils';
 import toast from 'react-hot-toast';
-
-import { User } from '../types';
-import { PaymentMethod, SubscriptionResponse } from '../types';
+import { Transaction } from '../types/transaction';
 
 interface PremiumPlan {
   id: string;
@@ -212,7 +210,7 @@ const Premium: React.FC = () => {
     if (plan.price === 0) {
       // Free plan - just update status
       try {
-        await updateUserPremiumStatus(true, planId);
+        await updateUserPremiumStatus(planId);
         toast.success(`Successfully subscribed to ${plan.name}!`);
       } catch (error) {
         toast.error('Failed to activate free plan');
@@ -280,7 +278,7 @@ const Premium: React.FC = () => {
       try {
         const result = await subscriptionService.cancelSubscription(activeSubscription.subscriptionId);
         if (result.success) {
-          await updateUserPremiumStatus(false, 'basic');
+          await updateUserPremiumStatus('basic');
           setActiveSubscription(null);
           toast.success('Subscription canceled successfully');
         } else {
@@ -420,12 +418,12 @@ const Premium: React.FC = () => {
                   </div>
                 )}
                 <div className="flex items-center">
-                  <Headphones className="h-4 w-4 text-orange-500 mr-2" />
+                  <Crown className="h-4 w-4 text-orange-500 mr-2" />
                   <span className="text-sm">{plan.benefits.support}</span>
                 </div>
                 {plan.benefits.cashback !== 'None' && (
                   <div className="flex items-center">
-                    <Gift className="h-4 w-4 text-yellow-500 mr-2" />
+                    <Star className="h-4 w-4 text-yellow-500 mr-2" />
                     <span className="text-sm">{plan.benefits.cashback}</span>
                   </div>
                 )}
@@ -433,7 +431,7 @@ const Premium: React.FC = () => {
 
               {/* Features */}
               <div className="space-y-2 mb-6">
-                {plan.features.slice(0, 4).map((feature, index) => (
+                {plan.features.slice(0, 4).map((feature: string, index: number) => (
                   <div key={index} className="flex items-start">
                     <Check className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
                     <span className="text-xs text-gray-700">{feature}</span>

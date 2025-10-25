@@ -576,7 +576,17 @@ class AIService {
     const categories: { [key: string]: number } = {};
     
     transactions.forEach(t => {
-      const category = t.category || 'other';
+      const description = t.description.toLowerCase();
+      let category = 'other';
+      
+      if (description.includes('food') || description.includes('restaurant')) {
+        category = 'food';
+      } else if (description.includes('transport') || description.includes('uber')) {
+        category = 'transport';
+      } else if (description.includes('bill') || description.includes('utility')) {
+        category = 'utilities';
+      }
+      
       categories[category] = (categories[category] || 0) + (t.amount || 0);
     });
 
