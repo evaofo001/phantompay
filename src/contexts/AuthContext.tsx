@@ -148,9 +148,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return isSignInWithEmailLink(firebaseAuth, window.location.href);
   };
 
-  const sendPasswordReset = async (email: string) => {
+  const sendPasswordResetEmail = async (email: string) => {
     try {
-      await sendPasswordReset(email);
+      const { sendPasswordResetEmail: firebaseSendPasswordResetEmail } = await import('firebase/auth');
+      await firebaseSendPasswordResetEmail(firebaseAuth, email);
     } catch (error) {
       throw error;
     }
@@ -225,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sendEmailSignInLink,
     completeEmailSignIn,
     isEmailLinkAuth,
-    sendPasswordResetEmail: sendPasswordReset,
+    sendPasswordResetEmail,
     loginWithPhoneNumber,
     confirmPhoneNumberCode,
     updatePassword,

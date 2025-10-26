@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon, Shield, Phone, RotateCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdminEmail } from '../config/adminConfig';
 import { getStoredEmailForSignIn } from '../utils/emailLinkAuth';
 import { generateOTP, storeOTP, verifyOTP, sendOTPEmail, getOTPExpiryTime } from '../utils/otpUtils';
 import { auth, RecaptchaVerifier } from '../config/firebase';
@@ -42,7 +43,8 @@ const LoginPage: React.FC = () => {
   const recaptchaVerifierRef = useRef<any>(null);
   
   const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth, sendPasswordResetEmail, loginWithPhoneNumber, confirmPhoneNumberCode } = useAuth();
-  
+  const navigate = useNavigate();
+
   const loginForm = useForm<LoginForm>();
   const registerForm = useForm<RegisterForm>();
   const emailLinkForm = useForm<{ email: string }>();
@@ -52,7 +54,8 @@ const LoginPage: React.FC = () => {
   const phoneCodeForm = useForm<{ code: string }>();
 
   if (currentUser) {
-    return <Navigate to="/" replace />;
+    const redirectTo = isAdminEmail(currentUser.email || '') ? '/admin' : '/';
+    return <Navigate to={redirectTo} replace />;
   }
 
   // Check if this is an email link sign-in on component mount

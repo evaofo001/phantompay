@@ -71,7 +71,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let unsubscribeSavings: (() => void) | undefined;
 
     const initializeUserData = async () => {
-      setLoading(true);
       try {
         console.log('🔍 Initializing user data for:', currentUser.uid);
 
@@ -95,6 +94,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Set default user immediately to prevent blank page
         console.log('✅ Setting default user:', defaultUser);
         setUser(defaultUser);
+        setLoading(false);
 
         // Try to migrate data from localStorage first
         try {
@@ -212,8 +212,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.log('✅ Setting fallback user:', fallbackUser);
           setUser(fallbackUser);
         }
-      } finally {
-        setLoading(false);
       }
     };
 
