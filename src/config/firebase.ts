@@ -17,7 +17,6 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   PhoneAuthProvider,
-  connectAuthEmulator,
   linkWithCredential,
   updatePassword,
   updateEmail,
@@ -43,7 +42,6 @@ import {
   increment,
   enableNetwork,
   disableNetwork,
-  connectFirestoreEmulator,
   Timestamp,
   serverTimestamp
 } from "firebase/firestore";
@@ -60,10 +58,14 @@ export const auth = getAuth(app);
 auth.useDeviceLanguage(); // Use device language for authentication UI
 export const db = getFirestore(app);
 
-// Initialize providers
+// Initialize Google Auth Provider with custom parameters
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 googleProvider.setCustomParameters({
-  prompt: 'select_account'
+    prompt: 'select_account',
+    access_type: 'offline',
+    login_hint: 'user@gmail.com'
 });
 
 // Export all Firebase functions

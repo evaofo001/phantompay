@@ -36,7 +36,7 @@ class AIService {
     try {
       // If no API key, use enhanced local logic
       if (!this.apiKey) {
-        return this.generateLocalResponse(message, user, transactions, context);
+        return this.generateLocalResponse(message, user, transactions);
       }
 
       // Use OpenAI API for dynamic responses
@@ -81,7 +81,7 @@ class AIService {
 
     } catch (error) {
       console.error('AI service error:', error);
-      return this.generateLocalResponse(message, user, transactions, context);
+      return this.generateLocalResponse(message, user, transactions);
     }
   }
 
@@ -91,8 +91,7 @@ class AIService {
   private generateLocalResponse(
     message: string,
     user: User,
-    transactions: Transaction[],
-    context?: any
+    transactions: Transaction[]
   ): AIResponse {
     const lowerMessage = message.toLowerCase();
     const analysis = this.analyzeFinancialData(user, transactions);
@@ -103,23 +102,23 @@ class AIService {
     }
 
     if (lowerMessage.includes('savings') || lowerMessage.includes('save')) {
-      return this.generateSavingsResponse(user, analysis);
+      return this.generateSavingsResponse(user);
     }
 
     if (lowerMessage.includes('spending') || lowerMessage.includes('expense')) {
-      return this.generateSpendingResponse(user, transactions, analysis);
+      return this.generateSpendingResponse(transactions, analysis);
     }
 
     if (lowerMessage.includes('loan') || lowerMessage.includes('borrow')) {
-      return this.generateLoanResponse(user, analysis);
+      return this.generateLoanResponse(user);
     }
 
     if (lowerMessage.includes('premium') || lowerMessage.includes('upgrade')) {
-      return this.generatePremiumResponse(user, analysis);
+      return this.generatePremiumResponse(user);
     }
 
     if (lowerMessage.includes('goal') || lowerMessage.includes('target')) {
-      return this.generateGoalResponse(user, analysis);
+      return this.generateGoalResponse(user);
     }
 
     // Default dynamic response
@@ -173,7 +172,7 @@ class AIService {
     };
   }
 
-  private generateSavingsResponse(user: User, analysis: FinancialAnalysis): AIResponse {
+  private generateSavingsResponse(user: User): AIResponse {
     const savings = user.savingsBalance || 0;
     const premiumTier = user.premiumPlan || 'basic';
     const interestRate = premiumTier === 'vip' ? 18 : premiumTier === 'plus' ? 12 : 6;
@@ -221,7 +220,7 @@ class AIService {
     };
   }
 
-  private generateSpendingResponse(user: User, transactions: Transaction[], analysis: FinancialAnalysis): AIResponse {
+  private generateSpendingResponse(transactions: Transaction[], analysis: FinancialAnalysis): AIResponse {
     const recentTransactions = transactions.filter(t => 
       new Date(t.timestamp).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000
     );
@@ -275,7 +274,7 @@ class AIService {
     };
   }
 
-  private generateLoanResponse(user: User, analysis: FinancialAnalysis): AIResponse {
+  private generateLoanResponse(user: User): AIResponse {
     const savings = user.savingsBalance || 0;
     const premiumTier = user.premiumPlan || 'basic';
     const interestRate = premiumTier === 'vip' ? 15 : premiumTier === 'plus' ? 18 : 20;
@@ -327,7 +326,7 @@ class AIService {
     };
   }
 
-  private generatePremiumResponse(user: User, analysis: FinancialAnalysis): AIResponse {
+  private generatePremiumResponse(user: User): AIResponse {
     const currentTier = user.premiumPlan || 'basic';
     const balance = user.walletBalance || 0;
     const savings = user.savingsBalance || 0;
@@ -406,7 +405,7 @@ class AIService {
     };
   }
 
-  private generateGoalResponse(user: User, analysis: FinancialAnalysis): AIResponse {
+  private generateGoalResponse(user: User): AIResponse {
     const balance = user.walletBalance || 0;
     const savings = user.savingsBalance || 0;
     const total = balance + savings;

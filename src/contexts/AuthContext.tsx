@@ -1,20 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
-  auth as firebaseAuth, 
+  auth as firebaseAuth,
+  db,
   GoogleAuthProvider, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithPhoneNumber, 
   onAuthStateChanged,
   sendPasswordResetEmail,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  PhoneAuthProvider,
   updatePassword as firebaseUpdatePassword,
   updateEmail as firebaseUpdateEmail,
   sendEmailVerification as firebaseSendEmailVerification
 } from '../config/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { sendEmailLink, completeEmailLinkSignIn, isEmailLinkSignIn } from '../utils/emailLinkAuth';
 
 // Use real Firebase User type
@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      await signInWithEmailAndPassword(firebaseAuth, email, password);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
       throw error; // Re-throw to be caught by UI
@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (email: string, password: string) => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      await createUserWithEmailAndPassword(firebaseAuth, email, password);
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
       throw error;
@@ -98,8 +98,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(firebaseAuth, provider);
+      // Use the pre-configured provider from firebase.ts
+      const result = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+      
+      if (!result.user) {
+        throw new Error('No user data returned from Google sign in');
+      }
+      
+      // Store user data in Firestore
+      await setDoc(doc(db, 'users', result.user.uid), {
+        displayName: result.user.displayName,
+        email: result.user.email,
+        photoURL: result.user.photoURL,
+        lastLogin: serverTimestamp(),
+        provider: 'google'
+      }, { merge: true });
       // currentUser will be set by onAuthStateChanged listener
     } catch (error) {
       throw error;
