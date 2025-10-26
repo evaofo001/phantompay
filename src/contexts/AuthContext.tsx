@@ -2,20 +2,23 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   auth as firebaseAuth,
   db,
-  GoogleAuthProvider, 
+  googleProvider,
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut, 
   signInWithPopup,
   signInWithPhoneNumber, 
   onAuthStateChanged,
-  sendPasswordResetEmail,
+  signInWithEmailLink,
+  isSignInWithEmailLink,
   updatePassword as firebaseUpdatePassword,
   updateEmail as firebaseUpdateEmail,
   sendEmailVerification as firebaseSendEmailVerification
 } from '../config/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { sendEmailLink, completeEmailLinkSignIn, isEmailLinkSignIn } from '../utils/emailLinkAuth';
+import {
+  sendEmailSignInLink as sendCustomEmailSignInLink
+} from '../services/emailService';
 
 // Use real Firebase User type
 import type { User } from 'firebase/auth';
@@ -26,7 +29,7 @@ interface AuthContextType {
   register: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   sendEmailSignInLink: (email: string) => Promise<void>;
-  completeEmailSignIn: (email?: string) => Promise<void>;
+  completeEmailSignIn: (email?: string) => Promise<any>;
   isEmailLinkAuth: () => boolean;
   sendPasswordResetEmail: (email: string) => Promise<void>;
   loginWithPhoneNumber: (phoneNumber: string, appVerifier: any) => Promise<any>;
@@ -99,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     try {
       // Use the pre-configured provider from firebase.ts
-      const result = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+      const result = await signInWithPopup(firebaseAuth, googleProvider);
       
       if (!result.user) {
         throw new Error('No user data returned from Google sign in');
@@ -121,28 +124,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendEmailSignInLink = async (email: string) => {
     try {
-      await sendEmailLink(email);
+      await sendCustomEmailSignInLink(email);
     } catch (error) {
       throw error;
     }
   };
 
   const completeEmailSignIn = async (email?: string) => {
+    if (!email && !window.localStorage.getItem('emailForSignIn')) {
+      throw new Error('No email found for sign in');
+    }
+    const emailToUse = email || window.localStorage.getItem('emailForSignIn')!;
     try {
-      await completeEmailLinkSignIn(email);
-      // currentUser will be set by onAuthStateChanged listener
+      const result = await signInWithEmailLink(firebaseAuth, emailToUse, window.location.href);
+      window.localStorage.removeItem('emailForSignIn');
+      return result;
     } catch (error) {
       throw error;
     }
   };
 
   const isEmailLinkAuth = (): boolean => {
-    return isEmailLinkSignIn();
+    return isSignInWithEmailLink(firebaseAuth, window.location.href);
   };
 
   const sendPasswordReset = async (email: string) => {
     try {
-      await sendPasswordResetEmail(firebaseAuth, email);
+      await sendPasswordReset(email);
     } catch (error) {
       throw error;
     }
