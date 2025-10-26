@@ -1,480 +1,266 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { Eye, EyeOff, Wallet, Mail, Lock, CheckCircle, ArrowLeft, Link as LinkIcon, Shield, Phone, RotateCw } from 'lucide-react';
+import { Eye, EyeOff, Wallet, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { isAdminEmail } from '../config/adminConfig';
-import { getStoredEmailForSignIn } from '../utils/emailLinkAuth';
-import { generateOTP, storeOTP, verifyOTP, sendOTPEmail, getOTPExpiryTime } from '../utils/otpUtils';
-import { auth, RecaptchaVerifier } from '../config/firebase';
 import toast from 'react-hot-toast';
-
-interface LoginForm {
-  email: string;
-  password: string;
-}
-
-interface RegisterForm {
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
-
-interface VerificationForm {
-  verificationCode: string;
-}
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const [isEmailLink, setIsEmailLink] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [otpEmail, setOtpEmail] = useState('');
-  const [otpPassword, setOtpPassword] = useState('');
-  const [otpExpiryTime, setOtpExpiryTime] = useState<number | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [useMagicLink, setUseMagicLink] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showPhoneAuth, setShowPhoneAuth] = useState(false);
-  const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const recaptchaVerifierRef = useRef<any>(null);
-  
-  const { currentUser, login, register, loginWithGoogle, sendEmailSignInLink, completeEmailSignIn, isEmailLinkAuth, sendPasswordResetEmail, loginWithPhoneNumber, confirmPhoneNumberCode } = useAuth();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+
+  const { currentUser, login, register, loginWithMagicLink, resetPassword, isEmailVerified } = useAuth();
   const navigate = useNavigate();
 
-  const loginForm = useForm<LoginForm>();
-  const registerForm = useForm<RegisterForm>();
-  const emailLinkForm = useForm<{ email: string }>();
-  const otpForm = useForm<VerificationForm>();
-  const forgotPasswordForm = useForm<{ email: string }>();
-  const phoneForm = useForm<{ phoneNumber: string }>();
-  const phoneCodeForm = useForm<{ code: string }>();
-
-  if (currentUser) {
-    const redirectTo = isAdminEmail(currentUser.email || '') ? '/admin' : '/';
-    return <Navigate to={redirectTo} replace />;
+  if (currentUser && isEmailVerified) {
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // Check if this is an email link sign-in on component mount
-  useEffect(() => {
-    if (isEmailLinkAuth()) {
-      const storedEmail = getStoredEmailForSignIn();
-      if (storedEmail) {
-        handleCompleteEmailLinkSignIn(storedEmail);
-      } else {
-        setIsEmailLink(true);
-        setIsLogin(true);
-      }
-    }
-  }, []);
-
-  // OTP Timer
-  useEffect(() => {
-    if (!otpExpiryTime) return;
-
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const remaining = otpExpiryTime - now;
-
-      if (remaining <= 0) {
-        setTimeRemaining('Expired');
-        setOtpExpiryTime(null);
-        clearInterval(interval);
-      } else {
-        const minutes = Math.floor(remaining / 60000);
-        const seconds = Math.floor((remaining % 60000) / 1000);
-        setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [otpExpiryTime]);
-
-  const onLoginSubmit = async (data: LoginForm) => {
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      const otp = generateOTP();
-      storeOTP(data.email, otp);
-      await sendOTPEmail(data.email, otp);
-
-      setOtpEmail(data.email);
-      setOtpPassword(data.password);
-      setShowOTPVerification(true);
-      setOtpExpiryTime(getOTPExpiryTime(data.email));
-
-      toast.success(`OTP sent to ${data.email}. Check your console/email.`);
+      await login(email, password);
+      toast.success('Welcome back!');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send OTP');
+      toast.error(error.message || 'Failed to sign in');
     } finally {
       setLoading(false);
     }
   };
 
-  const onOTPVerificationSubmit = async (data: VerificationForm) => {
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      const result = verifyOTP(otpEmail, data.verificationCode);
-
-      if (!result.success) {
-        toast.error(result.message);
-        return;
-      }
-
-      // Check if this is a login or registration flow
-      if (isLogin) {
-        await login(otpEmail, otpPassword);
-        toast.success('Successfully logged in!');
-      } else {
-        await register(otpEmail, otpPassword);
-        toast.success('Account created successfully! Welcome to PhantomPay! 🎉');
-      }
-      
-      setShowOTPVerification(false);
+      await register(email, password, fullName);
+      toast.success('Account created! Please check your email to verify your account.');
     } catch (error: any) {
-      toast.error(error.message || (isLogin ? 'Login failed' : 'Registration failed'));
+      toast.error(error.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
   };
 
-  const onRegisterSubmit = async (data: RegisterForm) => {
+  const handleMagicLinkLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      // Generate and send OTP for registration
-      const otp = generateOTP();
-      storeOTP(data.email, otp);
-      await sendOTPEmail(data.email, otp);
-
-      setOtpEmail(data.email);
-      setOtpPassword(data.password);
-      setShowOTPVerification(true);
-      setOtpExpiryTime(getOTPExpiryTime(data.email));
-
-      toast.success(`OTP sent to ${data.email}. Please verify your email to complete registration.`);
+      await loginWithMagicLink(email);
+      toast.success(`Magic link sent to ${email}! Check your inbox.`);
+      setEmail('');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send OTP');
+      toast.error(error.message || 'Failed to send magic link');
     } finally {
       setLoading(false);
     }
   };
 
-
-  const handleGoogleLogin = async () => {
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      await loginWithGoogle();
-      toast.success('Welcome!');
+      await resetPassword(email);
+      toast.success(`Password reset link sent to ${email}! Check your inbox.`);
+      setShowForgotPassword(false);
+      setEmail('');
     } catch (error: any) {
-      toast.error(error.message || 'Google sign-in failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendEmailLink = async (data: { email: string }) => {
-    setLoading(true);
-    try {
-      await sendEmailSignInLink(data.email);
-      toast.success(`Sign-in link sent to ${data.email}! Check your inbox.`);
-      setPendingEmail(data.email);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send email link');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCompleteEmailLinkSignIn = async (email?: string) => {
-    setLoading(true);
-    try {
-      await completeEmailSignIn(email);
-      toast.success('Successfully signed in with email link! 🎉');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to complete email link sign-in');
-      setIsEmailLink(true); // Show email input form
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasswordReset = async (data: { email: string }) => {
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(data.email);
-      toast.success(`Password reset link sent to ${data.email}! Check your inbox.`);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send password reset email');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePhoneAuth = async (data: { phoneNumber: string }) => {
-    setLoading(true);
-    try {
-      // Create reCAPTCHA verifier if not exists
-      if (!recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible'
-        });
-      }
-
-      const result = await loginWithPhoneNumber(data.phoneNumber, recaptchaVerifierRef.current);
-      setConfirmationResult(result);
-      setPhoneNumber(data.phoneNumber);
-      setShowPhoneAuth(true);
-      toast.success('Verification code sent to your phone!');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send verification code');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePhoneCodeVerification = async (data: { code: string }) => {
-    setLoading(true);
-    try {
-      await confirmPhoneNumberCode(confirmationResult, data.code);
-      toast.success('Successfully signed in with phone number!');
-      setShowPhoneAuth(false);
-      setConfirmationResult(null);
-    } catch (error: any) {
-      toast.error(error.message || 'Invalid verification code');
+      toast.error(error.message || 'Failed to send reset link');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        {/* Header */}
         <div className="text-center">
           <div className="flex justify-center items-center space-x-3 mb-6">
             <div className="bg-white p-3 rounded-2xl shadow-lg">
-              <Wallet className="h-12 w-12 text-purple-600" />
+              <Wallet className="h-12 w-12 text-blue-600" />
             </div>
           </div>
           <h2 className="text-4xl font-bold text-white mb-2">
             PhantomPay
           </h2>
-          <p className="text-purple-200 text-lg">
+          <p className="text-blue-200 text-lg">
             Your secure digital wallet
           </p>
         </div>
 
-        {/* Main Form Container */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          {/* Email Link Sign-in Form */}
-          {isEmailLink && (
+          {showForgotPassword ? (
             <>
               <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-blue-100 p-3 rounded-full">
-                    <LinkIcon className="h-8 w-8 text-blue-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Complete Email Link Sign-in
+                <h3 className="text-2xl font-bold text-slate-900 text-center">
+                  Reset Password
                 </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  Please confirm your email address to complete sign-in
+                <p className="text-slate-600 text-center mt-2">
+                  Enter your email to receive a password reset link
                 </p>
               </div>
 
-              <form onSubmit={emailLinkForm.handleSubmit(handleCompleteEmailLinkSignIn)} className="space-y-6">
+              <form onSubmit={handlePasswordReset} className="space-y-6">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
+                      <Mail className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
-                      {...emailLinkForm.register('email', { 
-                        required: 'Email is required',
-                        pattern: {
-                          value: /^\S+@\S+$/i,
-                          message: 'Invalid email address'
-                        }
-                      })}
                       type="email"
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors"
+                      required
+                      className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Enter your email"
-                      defaultValue={getStoredEmailForSignIn() || ''}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
-                  {emailLinkForm.formState.errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{emailLinkForm.formState.errors.email.message}</p>
-                  )}
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Completing Sign-in...
-                    </div>
-                  ) : (
-                    'Complete Sign-in'
-                  )}
-                </button>
-              </form>
-
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setIsEmailLink(false)}
-                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
-                >
-                  Back to regular sign-in
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* OTP Verification Form */}
-          {showOTPVerification && (
-            <>
-              <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-green-100 p-3 rounded-full">
-                    <Shield className="h-8 w-8 text-green-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Verify OTP
-                </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  Enter the 6-digit code sent to {otpEmail}
-                </p>
-                {timeRemaining && (
-                  <p className="text-sm text-center mt-2 font-medium text-blue-600">
-                    {timeRemaining === 'Expired' ? (
-                      <span className="text-red-600">Code expired</span>
-                    ) : (
-                      <>Expires in: {timeRemaining}</>
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <form onSubmit={otpForm.handleSubmit(onOTPVerificationSubmit)} className="space-y-6">
-                <div>
-                  <label htmlFor="verificationCode" className="block text-sm font-medium text-gray-700 mb-2">
-                    Verification Code
-                  </label>
-                  <input
-                    {...otpForm.register('verificationCode', {
-                      required: 'Verification code is required',
-                      pattern: {
-                        value: /^\d{6}$/,
-                        message: 'Code must be 6 digits'
-                      }
-                    })}
-                    type="text"
-                    maxLength={6}
-                    className="block w-full px-4 py-3 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors tracking-widest"
-                    placeholder="000000"
-                  />
-                  {otpForm.formState.errors.verificationCode && (
-                    <p className="mt-1 text-sm text-red-600">{otpForm.formState.errors.verificationCode.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Verifying...
-                    </div>
-                  ) : (
-                    'Verify & Sign In'
-                  )}
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Sending...
+                    </span>
+                  ) : 'Send Reset Link'}
                 </button>
               </form>
 
               <div className="mt-6 text-center">
                 <button
                   onClick={() => {
-                    setShowOTPVerification(false);
-                    setOtpEmail('');
-                    setOtpPassword('');
-                    setOtpExpiryTime(null);
+                    setShowForgotPassword(false);
+                    setEmail('');
                   }}
-                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  Back to login
+                  Back to sign in
                 </button>
               </div>
             </>
-          )}
-
-          {/* Login Form */}
-          {isLogin && !isEmailLink && !showOTPVerification && (
+          ) : useMagicLink ? (
             <>
               <div className="mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                <h3 className="text-2xl font-bold text-slate-900 text-center">
+                  Magic Link Sign In
+                </h3>
+                <p className="text-slate-600 text-center mt-2">
+                  No password needed - we'll send you a link
+                </p>
+              </div>
+
+              <form onSubmit={handleMagicLinkLogin} className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+                >
+                  {loading ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Sending...
+                    </span>
+                  ) : 'Send Magic Link'}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => {
+                    setUseMagicLink(false);
+                    setEmail('');
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Use password instead
+                </button>
+              </div>
+            </>
+          ) : isLogin ? (
+            <>
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-slate-900 text-center">
                   Welcome Back
                 </h3>
-                <p className="text-gray-600 text-center mt-2">
+                <p className="text-slate-600 text-center mt-2">
                   Sign in to your account
                 </p>
               </div>
 
-              <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
+              <form onSubmit={handlePasswordLogin} className="space-y-6">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
+                      <Mail className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
-                      {...loginForm.register('email', { 
-                        required: 'Email is required',
-                        pattern: {
-                          value: /^\S+@\S+$/i,
-                          message: 'Invalid email address'
-                        }
-                      })}
                       type="email"
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
+                      required
+                      className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
-                  {loginForm.formState.errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{loginForm.formState.errors.email.message}</p>
-                  )}
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
                     Password
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400" />
+                      <Lock className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
-                      {...loginForm.register('password', { 
-                        required: 'Password is required'
-                      })}
                       type={showPassword ? 'text' : 'password'}
-                      className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
+                      required
+                      className="block w-full pl-10 pr-10 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                     <button
                       type="button"
@@ -482,177 +268,136 @@ const LoginPage: React.FC = () => {
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
                       {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <EyeOff className="h-5 w-5 text-slate-400 hover:text-slate-600" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <Eye className="h-5 w-5 text-slate-400 hover:text-slate-600" />
                       )}
                     </button>
                   </div>
-                  {loginForm.formState.errors.password && (
-                    <p className="mt-1 text-sm text-red-600">{loginForm.formState.errors.password.message}</p>
-                  )}
+                </div>
+
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Forgot Password?
+                  </button>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
                       Signing In...
-                    </div>
-                  ) : (
-                    'Sign In'
-                  )}
+                    </span>
+                  ) : 'Sign In'}
                 </button>
               </form>
 
-              {/* Forgot Password Option */}
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => setShowForgotPassword(true)}
-                  className="text-sm text-purple-600 hover:text-purple-500 font-medium"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-
-              {/* Email Link Option */}
               <div className="mt-6">
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300" />
+                    <div className="w-full border-t border-slate-300" />
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or</span>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <form onSubmit={emailLinkForm.handleSubmit(handleSendEmailLink)} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Sign in with Email Link (Passwordless)
-                      </label>
-                      <div className="flex space-x-2">
-                        <div className="flex-1 relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Mail className="h-5 w-5 text-gray-400" />
-                          </div>
-                          <input
-                            {...emailLinkForm.register('email', { 
-                              required: 'Email is required',
-                              pattern: {
-                                value: /^\S+@\S+$/i,
-                                message: 'Invalid email address'
-                              }
-                            })}
-                            type="email"
-                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
-                            placeholder="Enter your email"
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-                        >
-                          <LinkIcon className="h-4 w-4 mr-1" />
-                          Send Link
-                        </button>
-                      </div>
-                      {emailLinkForm.formState.errors.email && (
-                        <p className="mt-1 text-sm text-red-600">{emailLinkForm.formState.errors.email.message}</p>
-                      )}
-                    </div>
-                  </form>
-                </div>
-              </div>
-
-              {/* Phone Authentication Option */}
-              <div className="mt-6">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or</span>
+                    <span className="px-2 bg-white text-slate-500">Or</span>
                   </div>
                 </div>
 
                 <div className="mt-6">
                   <button
-                    onClick={() => setShowPhoneAuth(true)}
-                    className="w-full inline-flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                    type="button"
+                    onClick={() => setUseMagicLink(true)}
+                    className="w-full inline-flex justify-center items-center py-3 px-4 border border-slate-300 rounded-lg shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200"
                   >
-                    <Phone className="h-5 w-5 mr-2 text-gray-400" />
-                    Sign in with Phone
+                    <Mail className="h-5 w-5 mr-2 text-slate-400" />
+                    Use Magic Link (No Password)
                   </button>
                 </div>
               </div>
-            </>
-          )}
 
-          {/* Registration Form */}
-          {!isLogin && !isEmailLink && (
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => {
+                    setIsLogin(false);
+                    setEmail('');
+                    setPassword('');
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Don't have an account? Sign up
+                </button>
+              </div>
+            </>
+          ) : (
             <>
               <div className="mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
+                <h3 className="text-2xl font-bold text-slate-900 text-center">
                   Create Account
                 </h3>
-                <p className="text-gray-600 text-center mt-2">
+                <p className="text-slate-600 text-center mt-2">
                   Join PhantomPay today
                 </p>
               </div>
 
-              <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6">
+              <form onSubmit={handleRegister} className="space-y-6">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="fullName" className="block text-sm font-medium text-slate-700 mb-2">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    className="block w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
+                      <Mail className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
-                      {...registerForm.register('email', { 
-                        required: 'Email is required',
-                        pattern: {
-                          value: /^\S+@\S+$/i,
-                          message: 'Invalid email address'
-                        }
-                      })}
                       type="email"
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
+                      required
+                      className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
-                  {registerForm.formState.errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.email.message}</p>
-                  )}
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
                     Password
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400" />
+                      <Lock className="h-5 w-5 text-slate-400" />
                     </div>
                     <input
-                      {...registerForm.register('password', { 
-                        required: 'Password is required',
-                        minLength: {
-                          value: 6,
-                          message: 'Password must be at least 6 characters'
-                        }
-                      })}
                       type={showPassword ? 'text' : 'password'}
-                      className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
+                      required
+                      minLength={6}
+                      className="block w-full pl-10 pr-10 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                     <button
                       type="button"
@@ -660,345 +405,46 @@ const LoginPage: React.FC = () => {
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
                       {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <EyeOff className="h-5 w-5 text-slate-400 hover:text-slate-600" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                        <Eye className="h-5 w-5 text-slate-400 hover:text-slate-600" />
                       )}
                     </button>
                   </div>
-                  {registerForm.formState.errors.password && (
-                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.password.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      {...registerForm.register('confirmPassword', { 
-                        required: 'Please confirm your password',
-                        validate: (value) => {
-                          const password = registerForm.watch('password');
-                          return value === password || 'Passwords do not match';
-                        }
-                      })}
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-colors"
-                      placeholder="Confirm your password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                      )}
-                    </button>
-                  </div>
-                  {registerForm.formState.errors.confirmPassword && (
-                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.confirmPassword.message}</p>
-                  )}
+                  <p className="mt-1 text-xs text-slate-500">Must be at least 6 characters</p>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
                 >
                   {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Sending Verification...
-                    </div>
-                  ) : (
-                    'Create Account'
-                  )}
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Creating Account...
+                    </span>
+                  ) : 'Create Account'}
                 </button>
               </form>
-            </>
-          )}
-
-          {/* Google Sign In - Only show for login or registration form */}
-          {!isEmailLink && (
-            <>
-              <div className="mt-6">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or continue with Google</span>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <button
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                    className="w-full inline-flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Sign in with Google
-                  </button>
-                </div>
-              </div>
 
               <div className="mt-6 text-center">
                 <button
                   onClick={() => {
-                    setIsLogin(!isLogin);
-                    setIsEmailLink(false);
-                    setPendingEmail('');
+                    setIsLogin(true);
+                    setEmail('');
+                    setPassword('');
+                    setFullName('');
                   }}
-                  className="text-sm text-purple-600 hover:text-purple-500 font-medium"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+                  Already have an account? Sign in
                 </button>
               </div>
             </>
-          )}
-
-          {/* Forgot Password Form */}
-          {showForgotPassword && (
-            <>
-              <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-blue-100 p-3 rounded-full">
-                    <RotateCw className="h-8 w-8 text-blue-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Reset Password
-                </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  Enter your email to receive a password reset link
-                </p>
-              </div>
-          
-              <form onSubmit={forgotPasswordForm.handleSubmit(handlePasswordReset)} className="space-y-6">
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      {...forgotPasswordForm.register('email', { 
-                        required: 'Email is required',
-                        pattern: {
-                          value: /^\S+@\S+$/i,
-                          message: 'Invalid email address'
-                        }
-                      })}
-                      type="email"
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors"
-                      placeholder="Enter your email"
-                    />
-                  </div>
-                  {forgotPasswordForm.formState.errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{forgotPasswordForm.formState.errors.email.message}</p>
-                  )}
-                </div>
-          
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Sending Reset Link...
-                    </div>
-                  ) : (
-                    'Send Reset Link'
-                  )}
-                </button>
-              </form>
-          
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setShowForgotPassword(false)}
-                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
-                >
-                  Back to login
-                </button>
-              </div>
-            </>
-          )}
-          
-          {/* Phone Authentication Form */}
-          {showPhoneAuth && !confirmationResult && (
-            <>
-              <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-green-100 p-3 rounded-full">
-                    <Phone className="h-8 w-8 text-green-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Phone Authentication
-                </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  Enter your phone number to receive a verification code
-                </p>
-              </div>
-          
-              <form onSubmit={phoneForm.handleSubmit(handlePhoneAuth)} className="space-y-6">
-                <div>
-                  <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      {...phoneForm.register('phoneNumber', { 
-                        required: 'Phone number is required',
-                        pattern: {
-                          value: /^\+[1-9]\d{1,14}$/,
-                          message: 'Please enter a valid phone number with country code (e.g., +254712345678)'
-                        }
-                      })}
-                      type="tel"
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors"
-                      placeholder="+254712345678"
-                    />
-                  </div>
-                  {phoneForm.formState.errors.phoneNumber && (
-                    <p className="mt-1 text-sm text-red-600">{phoneForm.formState.errors.phoneNumber.message}</p>
-                  )}
-                </div>
-          
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Sending Code...
-                    </div>
-                  ) : (
-                    'Send Verification Code'
-                  )}
-                </button>
-              </form>
-          
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setShowPhoneAuth(false)}
-                  className="text-sm text-green-600 hover:text-green-500 font-medium"
-                >
-                  Back to login
-                </button>
-              </div>
-            </>
-          )}
-          
-          {/* Phone Code Verification Form */}
-          {showPhoneAuth && confirmationResult && (
-            <>
-              <div className="mb-6">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-green-100 p-3 rounded-full">
-                    <Shield className="h-8 w-8 text-green-600" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 text-center">
-                  Verify Phone Number
-                </h3>
-                <p className="text-gray-600 text-center mt-2">
-                  Enter the 6-digit code sent to {phoneNumber}
-                </p>
-              </div>
-          
-              <form onSubmit={phoneCodeForm.handleSubmit(handlePhoneCodeVerification)} className="space-y-6">
-                <div>
-                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
-                    Verification Code
-                  </label>
-                  <input
-                    {...phoneCodeForm.register('code', {
-                      required: 'Verification code is required',
-                      pattern: {
-                        value: /^\d{6}$/,
-                        message: 'Code must be 6 digits'
-                      }
-                    })}
-                    type="text"
-                    maxLength={6}
-                    className="block w-full px-4 py-3 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent transition-colors tracking-widest"
-                    placeholder="000000"
-                  />
-                  {phoneCodeForm.formState.errors.code && (
-                    <p className="mt-1 text-sm text-red-600">{phoneCodeForm.formState.errors.code.message}</p>
-                  )}
-                </div>
-          
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Verifying...
-                    </div>
-                  ) : (
-                    'Verify & Sign In'
-                  )}
-                </button>
-              </form>
-          
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => {
-                    setShowPhoneAuth(false);
-                    setConfirmationResult(null);
-                  }}
-                  className="text-sm text-green-600 hover:text-green-500 font-medium"
-                >
-                  Back to login
-                </button>
-              </div>
-            </>
-          )}
-          
-          {/* ReCAPTCHA Container */}
-          <div id="recaptcha-container" className="mt-4"></div>
-          
-          {/* Show pending email link message */}
-          {pendingEmail && !isEmailLink && !showForgotPassword && !showPhoneAuth && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center">
-                <Mail className="h-5 w-5 text-blue-600 mr-2" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900">Email Link Sent!</p>
-                  <p className="text-sm text-blue-700">
-                    Check your inbox at {pendingEmail} and click the sign-in link.
-                  </p>
-                </div>
-              </div>
-            </div>
           )}
         </div>
       </div>

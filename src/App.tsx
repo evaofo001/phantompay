@@ -29,16 +29,20 @@ import Loans from './pages/Loans';
 import Savings from './pages/Savings';
 import EVA from './pages/EVA';
 import EmailLinkHandler from './components/EmailLinkHandler';
+import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <Router>
-          <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+          <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/email-link" element={<EmailLinkHandler />} />
+            <Route path="/auth/verify" element={<VerifyEmail />} />
+            <Route path="/auth/reset-password" element={<ResetPassword />} />
             
             {/* Protected Routes */}
             <Route path="/*" element={

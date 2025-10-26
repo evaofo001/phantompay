@@ -1,44 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  auth as firebaseAuth,
-  db,
-  googleProvider,
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  signInWithPopup,
-  signInWithPhoneNumber, 
-  onAuthStateChanged,
-  signInWithEmailLink,
-  isSignInWithEmailLink,
-  updatePassword as firebaseUpdatePassword,
-  updateEmail as firebaseUpdateEmail,
-  sendEmailVerification as firebaseSendEmailVerification
-} from '../config/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import {
-  sendEmailSignInLink as sendCustomEmailSignInLink
-} from '../services/emailService';
-
-// Use real Firebase User type
-import type { User } from 'firebase/auth';
+import { supabase } from '../lib/supabase';
+import type { User, Session, AuthError } from '@supabase/supabase-js';
 
 interface AuthContextType {
   currentUser: User | null;
+  session: Session | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  sendEmailSignInLink: (email: string) => Promise<void>;
-  completeEmailSignIn: (email?: string) => Promise<any>;
-  isEmailLinkAuth: () => boolean;
-  sendPasswordResetEmail: (email: string) => Promise<void>;
-  loginWithPhoneNumber: (phoneNumber: string, appVerifier: any) => Promise<any>;
-  confirmPhoneNumberCode: (confirmationResult: any, code: string) => Promise<void>;
+  register: (email: string, password: string, fullName?: string) => Promise<void>;
+  loginWithMagicLink: (email: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
-  updateEmail: (newEmail: string) => Promise<void>;
-  sendEmailVerification: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
+  isEmailVerified: boolean;
+  resendVerificationEmail: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,189 +26,174 @@ export const useAuth = () => {
   return context;
 };
 
-// Mock authentication for development
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Use Firebase onAuthStateChanged to manage user session
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-      if (user) {
-        // User is signed in - use the real Firebase User object
-        setCurrentUser(user);
-        // Store user data in localStorage for persistence
-        localStorage.setItem('phantompay_user', JSON.stringify({ 
-          uid: user.uid, 
-          email: user.email, 
-          displayName: user.displayName,
-          emailVerified: user.emailVerified 
-        }));
-      } else {
-        // User is signed out
-        setCurrentUser(null);
-        localStorage.removeItem('phantompay_user');
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setCurrentUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      (async () => {
+        setSession(session);
+        setCurrentUser(session?.user ?? null);
+        setLoading(false);
+
+        if (session?.user && _event === 'SIGNED_IN') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (!profile) {
+            await supabase.from('profiles').insert({
+              id: session.user.id,
+              email: session.user.email,
+              full_name: session.user.user_metadata?.full_name || null,
+            });
+
+            await supabase.from('wallets').insert({
+              user_id: session.user.id,
+              balance: 0,
+              currency: 'UGX',
+            });
+          }
+        }
+      })();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const register = async (email: string, password: string, fullName?: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName || '',
+          },
+          emailRedirectTo: `${window.location.origin}/auth/verify`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        throw new Error('An account with this email already exists');
+      }
+    } catch (error) {
+      const authError = error as AuthError;
+      throw new Error(authError.message);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(firebaseAuth, email, password);
-      // currentUser will be set by onAuthStateChanged listener
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
     } catch (error) {
-      throw error; // Re-throw to be caught by UI
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const loginWithMagicLink = async (email: string) => {
     try {
-      await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      // currentUser will be set by onAuthStateChanged listener
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/verify`,
+        },
+      });
+
+      if (error) throw error;
     } catch (error) {
-      throw error;
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
-  const loginWithGoogle = async () => {
+  const resetPassword = async (email: string) => {
     try {
-      // Use the pre-configured provider from firebase.ts
-      const result = await signInWithPopup(firebaseAuth, googleProvider);
-      
-      if (!result.user) {
-        throw new Error('No user data returned from Google sign in');
-      }
-      
-      // Store user data in Firestore
-      await setDoc(doc(db, 'users', result.user.uid), {
-        displayName: result.user.displayName,
-        email: result.user.email,
-        photoURL: result.user.photoURL,
-        lastLogin: serverTimestamp(),
-        provider: 'google'
-      }, { merge: true });
-      // currentUser will be set by onAuthStateChanged listener
-    } catch (error) {
-      throw error;
-    }
-  };
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
 
-  const sendEmailSignInLink = async (email: string) => {
-    try {
-      await sendCustomEmailSignInLink(email);
+      if (error) throw error;
     } catch (error) {
-      throw error;
-    }
-  };
-
-  const completeEmailSignIn = async (email?: string) => {
-    if (!email && !window.localStorage.getItem('emailForSignIn')) {
-      throw new Error('No email found for sign in');
-    }
-    const emailToUse = email || window.localStorage.getItem('emailForSignIn')!;
-    try {
-      const result = await signInWithEmailLink(firebaseAuth, emailToUse, window.location.href);
-      window.localStorage.removeItem('emailForSignIn');
-      return result;
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const isEmailLinkAuth = (): boolean => {
-    return isSignInWithEmailLink(firebaseAuth, window.location.href);
-  };
-
-  const sendPasswordResetEmail = async (email: string) => {
-    try {
-      const { sendPasswordResetEmail: firebaseSendPasswordResetEmail } = await import('firebase/auth');
-      await firebaseSendPasswordResetEmail(firebaseAuth, email);
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const loginWithPhoneNumber = async (phoneNumber: string, appVerifier: any) => {
-    try {
-      const confirmationResult = await signInWithPhoneNumber(firebaseAuth, phoneNumber, appVerifier);
-      return confirmationResult;
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const confirmPhoneNumberCode = async (confirmationResult: any, code: string) => {
-    try {
-      await confirmationResult.confirm(code);
-      // currentUser will be set by onAuthStateChanged listener
-    } catch (error) {
-      throw error;
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
   const updatePassword = async (newPassword: string) => {
     try {
-      if (!firebaseAuth.currentUser) {
-        throw new Error('No user is currently signed in');
-      }
-      await firebaseUpdatePassword(firebaseAuth.currentUser, newPassword);
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
     } catch (error) {
-      throw error;
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
-  const updateEmail = async (newEmail: string) => {
+  const resendVerificationEmail = async () => {
     try {
-      if (!firebaseAuth.currentUser) {
-        throw new Error('No user is currently signed in');
+      if (!currentUser?.email) {
+        throw new Error('No user email found');
       }
-      await firebaseUpdateEmail(firebaseAuth.currentUser, newEmail);
-    } catch (error) {
-      throw error;
-    }
-  };
 
-  const sendEmailVerification = async () => {
-    try {
-      if (!firebaseAuth.currentUser) {
-        throw new Error('No user is currently signed in');
-      }
-      await firebaseSendEmailVerification(firebaseAuth.currentUser);
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: currentUser.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/verify`,
+        },
+      });
+
+      if (error) throw error;
     } catch (error) {
-      throw error;
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
   const logout = async () => {
     try {
-      await signOut(firebaseAuth);
-      // currentUser will be set to null by onAuthStateChanged listener
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     } catch (error) {
-      throw error;
+      const authError = error as AuthError;
+      throw new Error(authError.message);
     }
   };
 
-
   const value = {
     currentUser,
+    session,
     login,
     register,
-    loginWithGoogle,
-    sendEmailSignInLink,
-    completeEmailSignIn,
-    isEmailLinkAuth,
-    sendPasswordResetEmail,
-    loginWithPhoneNumber,
-    confirmPhoneNumberCode,
+    loginWithMagicLink,
+    resetPassword,
     updatePassword,
-    updateEmail,
-    sendEmailVerification,
     logout,
-    loading
+    loading,
+    isEmailVerified: currentUser?.email_confirmed_at !== null && currentUser?.email_confirmed_at !== undefined,
+    resendVerificationEmail,
   };
 
   return (
