@@ -1,4 +1,3 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import {
@@ -18,6 +17,7 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   PhoneAuthProvider,
+  connectAuthEmulator,
   linkWithCredential,
   updatePassword,
   updateEmail,
@@ -53,9 +53,18 @@ import { firebaseConfig } from './firebaseConfig';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize services
 export const analytics = getAnalytics(app);
 export const auth = getAuth(app);
+auth.useDeviceLanguage(); // Use device language for authentication UI
 export const db = getFirestore(app);
+
+// Initialize providers
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 // Export all Firebase functions
 export {
