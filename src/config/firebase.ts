@@ -53,9 +53,16 @@ import { firebaseConfig } from './firebaseConfig';
 const app = initializeApp(firebaseConfig);
 
 // Initialize services
-export const analytics = getAnalytics(app);
+let analytics;
+try {
+  analytics = getAnalytics(app);
+} catch (error) {
+  console.warn('Analytics not available:', error);
+}
+export { analytics };
+
 export const auth = getAuth(app);
-auth.useDeviceLanguage(); // Use device language for authentication UI
+auth.useDeviceLanguage();
 export const db = getFirestore(app);
 
 // Initialize Google Auth Provider with custom parameters
